@@ -1,0 +1,310 @@
+######################################################################
+#                       PIPELINE DEFINITION
+######################################################################
+# what modules are we running
+run:
+    - dataset
+    - run_pairs
+    - dndz
+  #  - compare
+    #- compare_noz_fom    #NOT IMPLEMENTED YET [see Pauline's module on Github]
+
+
+
+######################################################################
+#                       verbose module
+######################################################################
+# verbose config:
+# 0: print nothing
+# 1: print only upon completing full item
+# 2: print everything
+verbose: 1
+
+
+######################################################################
+#                       data set module
+######################################################################
+# All inputs are read as dictionaries, so it is important to respect the
+# identation. It produces the catalog "dataset_path_output", containing
+# unknown and reference samples correctly binned for the paircounts.
+# if "dataset_path_output" has already been computed, there is no need
+# to run this module
+
+dataset:
+
+    #****************************************************************
+    reference_data:
+        path: input_files/specz_COSMOS.fits
+        #table: catalog [for hdf5 files]
+        file_format: fits
+        columns:
+            ra_column: RA                           # name of RA column
+            dec_column: DEC                         # name of DEC column
+            z_column: Z                             # name of Z column
+            w_column: None                          # name of W column (not mandatory, could be set to None or erased)
+
+
+    #****************************************************************
+    reference_random:
+        path: input_files/specz_COSMOS_random.fits
+        file_format: fits
+        columns:
+            ra_column: RA                         # name of RA column
+            dec_column: DEC                       # name of DEC column
+            z_column: None                        # name of Z column (not mandatory for randoms, could be set to None or erased)
+            w_column: None                        # name of W column (not mandatory for randoms, could be set to None or erased)
+
+    #****************************************************************
+    unknown_data:
+        path: input_files/photoz_COSMOS_speczrestricted.fits
+        file_format: fits
+        columns:
+            ra_column: RA                           # name of RA column
+            dec_column: DEC                         # name of DEC colum
+            z_column: Zphoto                        # name of photo Z column
+            z_true_column: Zphoto                   # name of true Z column
+            w_column: None                          # name of W column (not mandatory for randoms, could be set to None or erased)
+
+
+    #****************************************************************
+    unknown_random:
+        path: input_files/photoz_COSMOS_speczrestricted_random.fits
+        file_format: fits
+        columns:
+            ra_column: RA                           # name of RA column
+            dec_column: DEC                         # name of DEC colum
+            z_column: None                          # name of photo Z column (not mandatory, could be set to None or erased)
+            w_column: None                          # name of W column (not mandatory, could be set to None or erased)
+
+
+    #****************************************************************
+    # Binning in tomographic bins for the unknown
+    unknown_bins:
+          name_column: Zphoto           #Name of the column for  binning  the unknown in tomobins. It could be different than redshift (e.g. colors)
+
+          type: between               # if type: between, it creates the array with numpy.linspace. array has to be in the form [min,max,numbofbins].
+          array: [0.6,0.8,1]          # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
+                                      # if type: equal, you have to provide the edges of your bins in array (e.g. :array: [0.1,0.2,0.3,0.6,1.0])
+                                      #
+          #type: equal
+          #array: [0.1,0.2,0.3,0.5,1.0]
+
+    reference_bins:                     #Name of the column for binning of the reference. It could be different than redshift
+          name_column: Z
+          type: between                 # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
+          array: [0.4,1.0,12]           # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
+                                        # if type: equal, you have to provide the edges of your bins in array (e.g. :array: [0.1,0.2,0.3,0.6,1.0])
+          #type: equal
+          #array: [0.1,0.2,0.3,0.5,1.0]
+
+    #****************************************************************
+
+
+    max_objects: 300000000                             # maximum number of
+                                                      # objects in catalog
+  #  label_every: 10000                                # when assigning bins,
+                                                      # set the chunk size
+  #  randoms_time: 2.                                  #if randoms are more numerous than randoms_time*len(data_catalog), it cuts them
+
+
+    kind_jackknifes: 'kmeans'                           # current kinds: 'kmeans' or 'healpix'
+    number_of_jackknifes: 20                         # if kind is kmeans, number_of_jackknifes is number of regions
+                                                      # elif kind is healpix, number_of_jackknifes is the healpix nside
+    load_jackknifes: None             # path to the jackknifes centers. Only for kmeans. it can be left to None
+######################################################################
+#                       run pairs module
+######################################################################
+# commands for calculating paircounts
+run_pairs:
+
+    #This version computes the cross-correlation and the autocorrelation for a number of cases.
+    #1) cross corr UNK-REF in angular bin
+    #2) cross corr UNK-REF in angular bin corresponding to given physical distances
+    #3) cross corr UNK-REF density (single bin estimation)
+    #4) auto corr UNK in angular bin
+    #5) auto corr REF in angular bin
+    #6) auto corr REF in angular bin corresponding to given physical distances
+    #7) projected auto corr REF (physical distances)
+
+    #names_output:                   label :           usage - Method: Menard/Alex        Menard physical        Newman       Schmidt
+    #1) w_cross_angular_*            CC_A_                                 x       |           -           |      x     |       -
+    #2) w_cross_physical_*           CC_P_                                 -       |           x           |      -     |       -
+    #3) w_cross_density_*            CC_D_                                 -       |           -           |      -     |       x
+    #4) w_auto_UNK_*                 AC_U_                                 -       |           -           |      x     |       x
+    #5) w_auto_REF_angular_*         AC_R_A_                               x       |           -           |      -     |       -
+    #6) w_auto_REF_physical_*        AC_R_P_                               -       |           x           |      x     |       x
+    #7) w_auto_REF_rp_*              AC_R_R_                               -       |           -           |      x     |       x
+
+
+    overwrite: False              # if True, overwrite any existing files
+
+    corr_tobecomputed: ['CC_P_','CC_D_'] #,'AC_R_P_']
+
+    #fact_dist: 'ALL'  # if 'ALL', computes the pairs over all the combinations of jackknife regions
+
+    Nbins: [8]    #number of bins for the AC and CC.
+
+    min_theta: 0.001   #[degrees] min separation for the angular CC and AC
+    max_theta: 0.02    #[degrees] max separation for the angular CC and AC
+
+    min_rp: 200.      #[kpc] min separation for the  CC and AC in physical distances
+    max_rp: 700.     #[kpc] max separation for the  CC and AC in physical distances
+
+    max_rpar: 80.     # [Mpc] #extrema of the integration for the projected autocorrelation
+
+
+    cosmology: Planck15           #Accepted cosmology: Planck15,Planck13,WMAP9,WMAP7,WMAP5, FlatLambdaCDM
+               ##  [FlatLambdaCDM]                  # For other cosmology modify directly in the dataset module: FlatLambdaCDM(H0=70, Om0=0.3)
+
+
+    pairs : ['DD','DR']
+    w_estimator: 'Natural_noRu'               # estimator for the w(theta) - just for plotting purposes : 'LS','Natural','Hamilton','Natural_noRu','Natural_noRr'
+    number_of_cores: 4            # number of cores used in computing the pairs.
+
+######################################################################
+#                       dndz module
+######################################################################
+dndz:
+    #  Methods used to compute the dndz.
+    #  Options:
+    #
+    #    - 'ALL' : computes all the methods, with all the possible combinations of options (weight_variance,pairs_weighting)
+    #    - 'RELIABLE' only Menard_physical_s,Newman,Schmidt, and various bias correction
+    #    - 'Menard' :  dndz from cross-correlation computed at fixed angular scales
+    #    - 'Menard_physical_scales':   dndz from cross-correlation computed at fixed physical scales
+    #    - 'Menard_physical_weighting':   dndz from cross-correlation computed at fixed angular scales,
+    #                                     but weighting scales with a factor of f(theta)= distance(theta(z))
+    #    - 'Newman':   it uses the Newman method (fit the cross-correlation computed at fixed angular scales)
+    #    - 'Schimdt' : it uses the Schmidt method (one bin estimation, counting pairs in anulus in physical scales)
+
+
+
+
+    # ***  Methods options ****************************************************************************
+    methods:  ['Menard_physical_scales','Schmidt']
+
+    # options Menard only:
+    bias_correction_Menard:  0    # 0 NO BIAS, 1 bias 2 divide before integrating
+    weight_variance:  False       # minimum variance weighting [Menard method only]
+    pairs_weighting:  False      # if set, it weights the pair counts (DD,DR,RD,RR) first. [Menard method only]
+
+    # options Newman only:
+    bias_correction_Newman: 1    # 0 NO BIAS, 1 , 2 . (default=1)
+                                  # bias = 1: iterative procedure to estimate b_u; bias =2 : assumes b_u = b_r
+
+    fit_free: False               # Newman: let the exponent of the cross correlation free in the fitting (defaul: False)
+    use_physical_scale_Newman: False     # fit the CC in physical scales rather than angular scales (defaul: False)
+
+
+    # options Schmidt only:
+    bias_correction_Schmidt: 0    # 0 NO BIAS (standard), 1 , 2 , 3 , 4
+                                  # bias = 1: iterative procedure to estimate b_u; bias = 2 : assumes b_u = b_r ; bias = 3: N(z) and bias correction  just with the 1-bin estimate
+
+    # options Newman & Schmidt
+    show_fit: False                # if true, it saves the fit for CC and AC
+
+
+    # bounds format: [[min_amplitude, min_index, min_constant],[min_amplitude, min_index, min_constant]]
+    # if fit_free=False, it will ignore the bounds and guess on the index of CC.
+
+    bounds_CC_fit:        [[-1,1,-0.01],[1.,3, 0.01]]
+    initial_guess_CC_fit: [0.01,2,0.01]
+    bounds_AC_U_fit:       [[0.01,1,-0.01],[1.,3,0.01]]
+    initial_guess_AC_U_fit: [0.01,2,0.01]
+    bounds_AC_R_fit:       [[0.01,-1,-0.01],[200.,3,0.01]]
+    initial_guess_AC_R_fit:  [2,1.5,0.01]
+
+    # *** General options ****************************************************************************
+
+
+    w_estimator: 'Natural_noRu'             # which estimator to use for the w(theta)
+
+
+
+    only_diagonal:  True          # when it comes to compute statistics, it considers only the diagonal.
+    verbose:  False
+
+    z_min: 'None'                   # z_min (>=)
+    z_max: 'None'                   # z_max (<=)
+
+    # ***  Optimization options ****************************************************************************
+
+    just_pickup_best_scales:  False     # If dndz are already computed, it looks for the best scales only skipping the dndz computation.
+    optimization:  False              # if false, it doesn't perform the scales optimization
+    Nbins:  [8]                           # angular bins (they should be the same of run_pairs module)
+    interval_width: 3.                    # parameter for the optimization of scales
+    step_width: 6.                        # parameter for the optimization of scales
+    plot_compare_all: True                # default: false. If set to true, it plots the comparison among all the best results alreayd computed in the best folder.
+
+    # ***  Regularizations options  **************************************************************************
+    # this will apply only to the dndz with and without bias correction that have proven to have the best S/N
+
+    regularization: True                            # if set, it will correct for negative point and fit the dndz
+    set_negative_to_zero:  fixed                     # set negative values to zero; none, fixed, mcmc
+    fit: None                           # choose between None, gaussian_processes
+    prior_gaussian_process: None    #[1.53689698e+04  , 1.68542771e-01]
+
+# *****************************************************************************************************************************
+
+
+######################################################################
+###############################################################################
+# compare
+###############################################################################
+# compare takes input n(z) and does simple redshift bias model fitting
+compare:
+
+    labels: ['NZ_Schmidt___','NZ_Menard_physical_scales___'] #,'BNZ_Menard_physical_scales__']
+    shift_pz : [0.0,0.]  #testing purposes: intentionally applies a shift to the true pz
+    number_of_cores: 2   # not working yet..some conflicts..warning: at maximum one chain per core!
+    overwrite: 'False'
+  #  mode: 'shift'      #median or not
+    cov_mode: diag
+
+    # emcee parameters
+    # number of walkers
+    nwalkers: 32 #2
+    # burn in run
+    nburnin: 300
+    # number of samples
+    nrun: 1000 # 00
+    # emcee will complain if you don't have enough walkers for the number of
+    # parameters you are fitting, but I don't think it is as much of an issue
+    # with this particular model
+    live_dangerously: False
+
+    model_kwargs:
+        # pivot point for gamma of fit
+        z0: 0.5
+
+    # priors
+    # [parameter, kind, weight, {kwargs}]
+    # calls scipy stats objects
+    priors:
+        # bias evolution over full sample
+        # because this iteration of code only has one tomographic bin at a
+        # time, we set this to be very small so we can ignore it
+        gamma:
+            kind: uniform
+            weight: 1
+            kwargs:
+                loc: -0.0001
+                scale: 0.0002
+        # redshift bias in each bin
+        deltaz:
+            kind: truncnorm
+            weight: 1
+            kwargs:
+                a: -8.0
+                b: 8.0
+                loc: 0
+                scale: 0.05
+        # normalization in each bin
+        amplitude:
+            kind: truncnorm
+            weight: 1
+            kwargs:
+                a: -5.0
+                b: 5.0
+                loc: 0
+                scale: 1.0
