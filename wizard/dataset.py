@@ -31,9 +31,12 @@ def dataset(reference_data, reference_random,
             max_objects=30000000,
             label_every=10000,
             randoms_time=0.,
-            kind_jackknifes='kmeans',
-            number_of_jackknifes=100,
-            load_jackknifes='None',
+            kind_regions='kmeans',dontsaveplot=False,
+            #healpix_nside=32,
+            #healpix_filter_size=20,
+            #healpix_filter_start=-1,
+            number_of_regions=100,
+            load_regions='None',
             time0=0,**kwargs):
 
     """Load up datasets into understandable form
@@ -74,8 +77,6 @@ def dataset(reference_data, reference_random,
     Cannot handle loading up any rows that are vectors!
     """
 
-    #trying to add something really new!
-            
     #progress bar
     update_progress(0.)
 
@@ -102,24 +103,32 @@ def dataset(reference_data, reference_random,
     """
     I want to use the same randoms for each reference.
     """
+    '''
+    mask=catalog_ref_rndm['RA']<100
+    catalog_ref_rndm=catalog_ref_rndm[mask]
+    mask=catalog_ref['RA']<100
+    catalog_ref=catalog_ref[mask]
 
-
-
+    mask=catalog_ref_rndm['DEC']>-60.
+    catalog_ref_rndm=catalog_ref_rndm[mask]
+    mask=catalog_ref['DEC']>-60.
+    catalog_ref=catalog_ref[mask]
+    '''
     if randoms_time>0:
         if catalog_ref_rndm['RA'].shape[0]>randoms_time*(catalog_ref['RA'].shape[0]):
             catalog_ref_rndm=catalog_ref_rndm.sample(np.int(randoms_time*(catalog_ref['RA'].shape[0])))
 
 
     # Define jackknives over the reference randoms and saving them
-    if kind_jackknifes=='kmeans':
-        if load_jackknifes!='None':
-            centers=np.array(np.loadtxt(load_jackknifes))
+    if kind_regions=='kmeans':
+        if load_regions!='None':
+            centers=np.array(np.loadtxt(load_regions))
             np.savetxt('./pairscount/pairscounts_centers.txt', centers)
             centers_tree=spatial.cKDTree(centers)
         else:
             new_cat=np.array(zip(catalog_ref_rndm['RA'],catalog_ref_rndm['DEC']))
             A=new_cat[np.random.randint(new_cat.shape[0],size=20000),:]
-            centers_jck= kmeans_radec.kmeans_sample(A,number_of_jackknifes,maxiter=100,tol=1e-05,verbose=0)
+            centers_jck= kmeans_radec.kmeans_sample(A,number_of_regions,maxiter=100,tol=1e-05,verbose=0)
 
             #saving the senters
             np.savetxt('./pairscount/pairscounts_centers.txt', centers_jck.centers)
@@ -130,15 +139,15 @@ def dataset(reference_data, reference_random,
         _,catalog_ref_rndm['HPIX']= centers_tree.query(np.array(zip(catalog_ref_rndm['RA'],catalog_ref_rndm['DEC'])))
         _,catalog_ref['HPIX']= centers_tree.query(np.array(zip(catalog_ref['RA'],catalog_ref['DEC'])))
 
-    elif kind_jackknifes=='healpix':
+    elif kind_regions=='healpix':
         pd.options.mode.chained_assignment = None
-        catalog_ref_rndm['HPIX'] = radec_to_index(catalog_ref_rndm['DEC'], catalog_ref_rndm['RA'],number_of_jackknifes)
-        catalog_ref['HPIX'] = radec_to_index(catalog_ref['DEC'], catalog_ref['RA'],number_of_jackknifes)
+        catalog_ref_rndm['HPIX'] = radec_to_index(catalog_ref_rndm['DEC'], catalog_ref_rndm['RA'],number_of_regions)
+        catalog_ref['HPIX'] = radec_to_index(catalog_ref['DEC'], catalog_ref['RA'],number_of_regions)
 
         #saving the centers
-        unique=np.unique(radec_to_index(catalog_ref_rndm['DEC'], catalog_ref_rndm['RA'],number_of_jackknifes))
+        unique=np.unique(radec_to_index(catalog_ref_rndm['DEC'], catalog_ref_rndm['RA'],number_of_regions))
         healpix_to_int=(zip(unique,range(1,unique.shape[0])))
-        center_ra,center_dec=hp.pix2ang(number_of_jackknifes, unique,nest=False, lonlat=True)
+        center_ra,center_dec=hp.pix2ang(number_of_regions, unique,nest=False, lonlat=True)
         np.savetxt('./pairscount/pairscounts_centers.txt', zip(center_ra,center_dec))
 
         #converting from healpix to integer
@@ -149,7 +158,10 @@ def dataset(reference_data, reference_random,
 
     update_progress(0.4)
 
+    # remove jackknife_distance_file from previous run for the given number of jackknife
 
+    if  os.path.exists('./pairscount/pairs_dist/'+str(number_of_regions)+'.pkl'):
+        os.remove('./pairscount/pairs_dist/'+str(number_of_regions)+'.pkl')
 
     # create the redshift for the randoms if not provided
     if 'Z' not in catalog_ref_rndm.keys():
@@ -160,17 +172,18 @@ def dataset(reference_data, reference_random,
     catalog_ref_rndm['bins']=digitize(catalog_ref_rndm['Z'],  reference_bins_interval)
     catalog_ref['bins']=digitize(catalog_ref['binning_column'], reference_bins_interval)
 
-    plot_redshift_distr(catalog_ref_rndm['Z'],reference_bins_interval['z_edges'],'./pairscount/data_plot/ref_rndm_z.pdf')
-    plot_redshift_distr(catalog_ref['binning_column'],reference_bins_interval['z_edges'],'./pairscount/data_plot/ref_z.pdf')
+    if not dontsaveplot:
+        plot_redshift_distr(catalog_ref_rndm['Z'],reference_bins_interval['z_edges'],'./pairscount/data_plot/ref_rndm_z.pdf')
+        plot_redshift_distr(catalog_ref['binning_column'],reference_bins_interval['z_edges'],'./pairscount/data_plot/ref_z.pdf')
 
 
 
     # saving catalogs
     catalog_ref.to_hdf('./pairscount/dataset.h5', 'ref')
     catalog_ref_rndm.to_hdf('./pairscount/dataset.h5', 'ref_random')
-
-    plot_data(catalog_ref,'ref')
-    plot_data(catalog_ref_rndm,'ref_rndm')
+    if not dontsaveplot:
+        plot_data(catalog_ref,'ref',np.unique(catalog_ref_rndm['bins']))
+        plot_data(catalog_ref_rndm,'ref_rndm',np.unique(catalog_ref_rndm['bins']))
     update_progress(0.5)
     del catalog_ref
     del catalog_ref_rndm
@@ -186,20 +199,30 @@ def dataset(reference_data, reference_random,
     catalog_unk_rndm=load_catalogs(unknown_random,max_objects)
     catalog_unk_rndm=check_columns(unknown_random['columns'],catalog_unk_rndm)
     update_progress(0.7)
+    '''
+    mask=catalog_unk_rndm['RA']<100
+    catalog_unk_rndm=catalog_unk_rndm[mask]
+    mask=catalog_unk['RA']<100
+    catalog_unk=catalog_unk[mask]
 
+    mask=catalog_unk_rndm['DEC']>-60.
+    catalog_unk_rndm=catalog_unk_rndm[mask]
+    mask=catalog_unk['DEC']>-60.
+    catalog_unk=catalog_unk[mask]
+    '''
     # cut the randoms if too numerous
     if randoms_time>0:
         if catalog_unk_rndm['RA'].shape[0]>randoms_time*(catalog_unk['RA'].shape[0]):
             catalog_unk_rndm=catalog_unk_rndm.sample(np.int(randoms_time*(catalog_unk['RA'].shape[0])))
 
     # Assign jackknives
-    if  kind_jackknifes=='kmeans':
+    if  kind_regions=='kmeans':
         _,catalog_unk_rndm['HPIX']= centers_tree.query(np.array(zip(catalog_unk_rndm['RA'],catalog_unk_rndm['DEC'])))
         _,catalog_unk['HPIX']= centers_tree.query(np.array(zip(catalog_unk['RA'],catalog_unk['DEC'])))
         update_progress(0.8)
-    elif  kind_jackknifes=='healpix':
-        catalog_unk_rndm['HPIX'] = radec_to_index(catalog_unk_rndm['DEC'], catalog_unk_rndm['RA'],number_of_jackknifes)
-        catalog_unk['HPIX'] = radec_to_index(catalog_unk['DEC'], catalog_unk['RA'],number_of_jackknifes)
+    elif  kind_regions=='healpix':
+        catalog_unk_rndm['HPIX'] = radec_to_index(catalog_unk_rndm['DEC'], catalog_unk_rndm['RA'],number_of_regions)
+        catalog_unk['HPIX'] = radec_to_index(catalog_unk['DEC'], catalog_unk['RA'],number_of_regions)
 
         #converting from healpix to integer
         for kk_int,kk in enumerate(unique):
@@ -208,15 +231,22 @@ def dataset(reference_data, reference_random,
 
     if 'Z' not in catalog_unk_rndm.keys():
         catalog_unk_rndm['Z']=make_z_distribution(catalog_unk['binning_column'],unknown_bins_interval['z_edges'],catalog_unk_rndm['HPIX'].shape[0])
+    catalog_unk_rndm['Z_auto_']=make_z_distribution(catalog_unk[unknown_data['columns']['z_photo_columns'][0]],reference_bins_interval['z_edges'],catalog_unk_rndm['HPIX'].shape[0])
 
     # binning
 
     catalog_unk_rndm['bins']=digitize(catalog_unk_rndm['Z'], unknown_bins_interval)
-    catalog_unk['bins']=digitize(catalog_unk['binning_column'], unknown_bins_interval)
-    plot_redshift_distr(catalog_unk_rndm['Z'],reference_bins_interval['z_edges'],'./pairscount/data_plot/unk_rndm_z.pdf')
+    catalog_unk_rndm['bins_auto_']=digitize(catalog_unk_rndm['Z_auto_'], reference_bins_interval)
 
-    mask_plot=(catalog_unk['binning_column']>unknown_bins_interval['z_edges'][0])& (catalog_unk['binning_column']<unknown_bins_interval['z_edges'][-1])
-    plot_redshift_distr(catalog_unk['binning_column'][mask_plot],reference_bins_interval['z_edges'],'./pairscount/data_plot/unk_z.pdf')
+    catalog_unk['bins']=digitize(catalog_unk['binning_column'], unknown_bins_interval)
+    catalog_unk['bins_auto_']=digitize(catalog_unk[unknown_data['columns']['z_photo_columns'][0]], reference_bins_interval)
+
+    for i,mute in enumerate(unknown_bins_interval['z']):
+        if not dontsaveplot:
+            plot_redshift_distr(catalog_unk_rndm['Z'][catalog_unk_rndm['bins']==i+1],reference_bins_interval['z_edges'],'./pairscount/data_plot/unk_rndm_z_{0}.pdf'.format(i+1))
+        mask_plot=(catalog_unk['binning_column']>unknown_bins_interval['z_edges'][i])& (catalog_unk['binning_column']<unknown_bins_interval['z_edges'][i+1])
+        if not dontsaveplot:
+            plot_redshift_distr(catalog_unk['binning_column'][mask_plot],reference_bins_interval['z_edges'],'./pairscount/data_plot/unk_z_{0}.pdf'.format(i+1))
 
 
     update_progress(0.9)
@@ -225,8 +255,9 @@ def dataset(reference_data, reference_random,
     catalog_unk.to_hdf('./pairscount/dataset.h5', 'unk')
     catalog_unk_rndm.to_hdf('./pairscount/dataset.h5', 'unk_random')
 
-    plot_data(catalog_unk,'unk')
-    plot_data(catalog_unk_rndm,'unk_rndm')
+    if not dontsaveplot:
+        plot_data(catalog_unk,'unk',np.unique(catalog_unk_rndm['bins']))
+        plot_data(catalog_unk_rndm,'unk_rndm',np.unique(catalog_unk_rndm['bins']))
 
     update_progress(1.)
 
@@ -262,11 +293,14 @@ def load_catalogs(path,max_objects,additional_column=None):
         #eliminate the None columns
         columns_to_be_read=[]
         for column in path['columns'].keys():
-            if path['columns'][column]!= 'None':
-                columns_to_be_read.append(path['columns'][column])
+            if column == 'z_photo_columns':
+                for z_photo in path['columns'][column]:
+                    columns_to_be_read.append('{0}'.format(z_photo))
+            else:
+                if path['columns'][column]!= 'None':
+                    columns_to_be_read.append(path['columns'][column])
         if additional_column:
             columns_to_be_read.append(additional_column)
-
         columns_to_be_read=np.unique(columns_to_be_read)
         # open file ******************
 
@@ -370,12 +404,8 @@ def check_columns(columns,catalog,additional_column=None):
 
     #the additional column is for the binning. we have to check that it is not already present.
     if additional_column:
-        if additional_column not in [columns[key] for key in columns.keys()]:
-            #rename the column
-            catalog.rename(columns={additional_column: 'binning_column'}, inplace=True)
-        else:
-            #add the columm to the data frame
-            catalog['binning_column'] = copy.deepcopy(catalog[additional_column])
+        catalog['binning_column']=copy.deepcopy(catalog[additional_column])
+        #catalog.rename(columns={additional_column: 'binning_column'}, inplace=True)
 
     if columns['ra_column'] != 'RA':
         catalog.rename(columns={columns['ra_column']: 'RA'}, inplace=True)
@@ -383,10 +413,9 @@ def check_columns(columns,catalog,additional_column=None):
     if columns['dec_column'] != 'DEC':
         catalog.rename(columns={columns['dec_column']: 'DEC'}, inplace=True)
 
-    if 'z_column' in columns.keys(): #if I am loading randoms they could be provided without redshift
+    if 'z_column' in columns.keys():             #if I am loading randoms they could be provided without redshift
         if columns['z_column'] != 'Z':
                 catalog.rename(columns={columns['z_column']: 'Z'}, inplace=True)
-
 
     if 'w_column' in columns.keys():
         if columns['w_column']=='None':
@@ -559,9 +588,9 @@ def update_progress(progress,elapsed_time=0,starting_time=0):
 
 
 # plot jackknives & data  ********************************************
-def plot_data(catalog,label):
+def plot_data(catalog,label,indexes):
     color_i=[]
-    for gg in range(100):
+    for gg in range(1000):
             color_i.append('b')
             color_i.append('g')
             color_i.append('r')
@@ -570,16 +599,10 @@ def plot_data(catalog,label):
             color_i.append('y')
             color_i.append('k')
     #plotting jaccknives
-    print (np.unique(catalog['bins']))
-    if label=='unk_rndm':
-        length=2
-    elif label=='ref_rndm':
-        length=len(np.unique(catalog['bins'])-1)
-    else:
-        length=len(np.unique(catalog['bins'])-1)
+    #print (np.unique(catalog['bins']))
 
-    for i in range(1,length):
-        mask=catalog['bins']==i
+    for i in range(len(indexes)):
+        mask=catalog['bins']==i+1
         ra=catalog['RA'][mask]
         dec=catalog['DEC'][mask]
         jck=catalog['HPIX'][mask]
@@ -597,7 +620,7 @@ def plot_data(catalog,label):
         for j in range(len(np.unique(jck))):
             mask2=jck==j
             plt.plot(ra[mask2], dec[mask2], 'o', ms=4, alpha=1., color=color_i[j])
-        plt.savefig('./pairscount/data_plot/{0}_{1}.png'.format(label,i))
+        plt.savefig('./pairscount/data_plot/{0}_{1}.png'.format(label,i+1))
         plt.close()
 
 def  plot_redshift_distr(z,edges,label):

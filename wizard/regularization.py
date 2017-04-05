@@ -33,18 +33,25 @@ cosmol=Planck15
 #*************************************************************************
 #                         REGULARIZATION
 #*************************************************************************
+# we should only regularize the files we are interested into
+def regularization_routine(best_params,z,z_edges,zp_t_TOT,N,jk_r,only_diagonal,set_negative_to_zero,fit,prior_gaussian_process):
 
-def regularization_routine(z,z_edges,zp_t_TOT,N,jk_r,only_diagonal,set_negative_to_zero,fit,prior_gaussian_process):
-    for file in os.listdir('./output_dndz/best_Nz/'):
-        if file.endswith(".h5") and ('gaussian' not in file):
-
-            hdf = pd.HDFStore('./output_dndz/best_Nz/{0}'.format(file))
+    for file1 in best_params.keys():
+    #for file in os.listdir('./output_dndz/best_Nz/'):
+        file='NZ_{0}'.format(file1)
+        if ('gaussian' not in file):
+            
+            hdf = pd.HDFStore('./output_dndz/best_Nz/{0}.h5'.format(file))
 
             Nz = np.array(hdf['results'][0])
             Nz_jack=np.array(hdf['jackknife'])
 
             cov = np.array(hdf['cov'])
             err=np.zeros(cov.shape[0])
+            z=np.array(hdf['z'][0])
+            z_edges=np.array(hdf['z_edges'][0])
+            
+            #print (Nz.shape,Nz_jack.shape,z.shape,z_edges.shape,N.shape)
             hdf.close()
             for i in range(cov.shape[0]):
                 err[i]=np.sqrt(cov[i,i])
@@ -84,6 +91,7 @@ def plot2(z,z_bin,zp_t_TOT,Nz,Nz_jack,N,label_save,output,jk_r,only_diagonal,cov
 
 
     #compute statistics.
+    
     dict_stat=compute_statistics(z_bin,z,N,Nz,cov,Nz_jack)
 
 
@@ -262,7 +270,7 @@ def gaussian_process_module2(z_bin,z,Nz,err,cov,N,prior_gaussian_process):
     cov_gp = kernel_gp - np.dot(np.transpose(v), v)
 
 
-    dict_stat_gp=compute_statistics(z_bin,z,N,Nz_gp,cov_gp,np.zeros((10,10)))
+    dict_stat_gp=compute_statistics(z_bin,z,N,Nz_gp,cov_gp,np.zeros((100,100)))
     return  dict_stat_gp,rec,theta,rec1,theta1,cov_gp
 
 

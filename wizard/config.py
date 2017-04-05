@@ -12,7 +12,7 @@ import os
 from .dataset import dataset
 from .run_pairs import run_pairs
 from .dndz import dndz
-from .compare import compare
+from .compare_multiplefiles_joint import compare
 
 def wizard(config):
     """Run the wizard code, given a configuration dictionary
@@ -77,7 +77,7 @@ def wizard(config):
                     time0i = timeit.default_timer()
                 else:
                     time0i = 0
-            compare(time0=time0i, **config['compare'])
+            compare( **config['compare'])
     if time0:
         print('done', timeit.default_timer() - time0)
 
@@ -110,18 +110,14 @@ def make_directories(config):
         os.makedirs('./pairscount/')
     if not os.path.exists('./pairscount/pairs/'):
         os.makedirs('./pairscount/pairs/')
+    if not os.path.exists('./pairscount/pairs_dist/'):
+        os.makedirs('./pairscount/pairs_dist/')
     if not os.path.exists('./pairscount/data_plot/'):
         os.makedirs('./pairscount/data_plot/')
     if not os.path.exists('./pairscount/pairs_plot/'):
         os.makedirs('./pairscount/pairs_plot/')
     if not os.path.exists('./output_dndz/'):
         os.makedirs('./output_dndz/')
-    if not os.path.exists('./output_dndz/Nz/'):
-        os.makedirs('./output_dndz/Nz/')
-    if not os.path.exists('./output_dndz/best_Nz/'):
-        os.makedirs('./output_dndz/best_Nz/')
-    if not os.path.exists('./output_dndz/fit/'):
-        os.makedirs('./output_dndz/fit/')
 
     if not path.exists('./compare/'):
         makedirs('./compare/')

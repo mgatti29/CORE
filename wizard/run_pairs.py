@@ -15,11 +15,15 @@ import time
 import timeit
 import warnings
 import multiprocessing as mp
-from multiprocessing import Pool
+from multiprocessing import *
 from functools import partial
-from .functions_nz import weight_w,estimator
+from .functions_nz import weight_w,estimator,make_wz_errors,covariance_jck
+from scipy import spatial
+from scipy.spatial import distance
+from queue import *
 
-def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_R_A_','AC_R_P_','AC_R_R_'],
+
+def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_R_A_','AC_R_P_','AC_R_R_'],
                 pairs=['DD','DR','RD','RR'],
                 fact_dist=2,
                 Nbins=[10],
@@ -28,6 +32,7 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_R_A_','AC_
                 cosmology=Planck15,
                 w_estimator='LS',
                 time0=0, number_of_cores=2,
+                tomo_bins='ALL',jackknife_ring=False,jackknife_pairs=False,dontsaveplot= True,
                 **kwargs):
 
 
@@ -93,61 +98,115 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_R_A_','AC_
 
     njk=len(np.unique(reference_rndm['HPIX']))
 
+
+    distance_calc(unknown,reference,unknown_rndm,reference_rndm,njk,centers)
+
     # cycle over tomographic bins *****************************************************************
+    if tomo_bins=='ALL':
+        list_of_tomo=range(len(unknown_bins_interval['z']))+1
+    else:
+        list_of_tomo=[]
+        for i in range(len(tomo_bins)):
+            list_of_tomo.append(int(tomo_bins[i]))
+        list_of_tomo=np.array(list_of_tomo)
 
-    for i,z_unk_value in enumerate(unknown_bins_interval['z']):
-
-        ra_unk=np.array(unknown['RA'][unknown['bins']==i+1])
-        dec_unk=np.array(unknown['DEC'][unknown['bins']==i+1])
-        w_unk=np.array(unknown['W'][unknown['bins']==i+1])
-        jck_unk=np.array(unknown['HPIX'][unknown['bins']==i+1])
-
-
-        ra_unk_rndm=np.array(unknown_rndm['RA'][unknown_rndm['bins']==i+1])
-        dec_unk_rndm=np.array(unknown_rndm['DEC'][unknown_rndm['bins']==i+1])
-        w_unk_rndm=np.array(unknown_rndm['W'][unknown_rndm['bins']==i+1])
-        jck_unk_rndm=np.array(unknown_rndm['HPIX'][unknown_rndm['bins']==i+1])
-
+    # ************************************
+    number_of_works=len(corr_tobecomputed)*len(list_of_tomo)*len(reference_bins_interval['z'])
+    corr_tobecomputed_tot=[]
+    tomo_i=[]
+    ref_j=[]
+    for mute_i,i in enumerate(list_of_tomo):
+        for mute_j,j in enumerate(reference_bins_interval['z']):
+            for mute_corr, corr in enumerate(corr_tobecomputed):
+                corr_tobecomputed_tot.append(corr)
+                ref_j.append(mute_j)
+                tomo_i.append(i-1)
 
 
+    chunks=int(math.ceil(np.float(number_of_works))/number_of_cores)
 
+
+    start=timeit.default_timer()
+    update_progress(0.,timeit.default_timer(),start)
+    mute_w=0
+
+    stop_upd=False
+    for i in range(chunks+1):
         #PARALLELIZATION OF THE REDSHIFT SLICES.
+        workers=number_of_cores
+        work_queue = Queue()
+        done_queue = Queue()
+        processes = []
+        for w in range(number_of_cores):
+            if mute_w<number_of_works:
+                p = Process(target=redshift_slice, args=(jackknife_ring,reference,reference_rndm,
+                                                    unknown,unknown_rndm,cosmol, corr_tobecomputed_tot[mute_w],overwrite,
+                                                     verbose,pairs,min_rp,max_rp,Nbins,min_theta,max_theta,max_rpar,
+                                                     fact_dist, centers,njk,w_estimator,reference_bins_interval['z'],tomo_i[mute_w],ref_j[mute_w]))
 
-        pool  = mp.Pool(number_of_cores)
-        iterable = range(reference_bins_interval['z'].shape[0])
-        func = partial(redshift_slice,reference,reference_rndm,cosmol, corr_tobecomputed,overwrite, verbose,pairs,
-                        ra_unk,dec_unk,w_unk,jck_unk,ra_unk_rndm,dec_unk_rndm,w_unk_rndm,jck_unk_rndm,
-                        min_rp,max_rp,Nbins,min_theta,max_theta,max_rpar,fact_dist, centers,njk,w_estimator,reference_bins_interval['z'],i)
+                p.start()
+                processes.append(p)
+                work_queue.put('STOP')
+                mute_w+=1
 
-        pool.map(func, iterable)
+        for p in processes:
+            p.join()
+        if mute_w==number_of_works and not stop_upd:
+            stop_upd=True
+        if not stop_upd:
+            update_progress(np.float(mute_w)/np.float(number_of_works),timeit.default_timer(),start)
 
-        pool.close()
-        pool.join()
 
-        '''
-        for j,mutee_j in enumerate(reference_bins_interval['z']):
-            redshift_slice(reference,reference_rndm,cosmol, corr_tobecomputed,overwrite, verbose, pairs,
-                        ra_unk,dec_unk,w_unk,jck_unk,ra_unk_rndm,dec_unk_rndm,w_unk_rndm,jck_unk_rndm,
-                        min_rp,max_rp,Nbins,min_theta,max_theta,max_rpar,fact_dist, centers,njk,w_estimator,reference_bins_interval['z'],0,j)
-        '''
-    # plotting figures **************************************************
 
     for i,z_unk in enumerate (unknown_bins_interval['z']):
-        plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'w',w_estimator)
+        if not dontsaveplot:
+            plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'w',w_estimator)
         '''
         plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'DD')
         plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'DR')
         plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'RD')
         plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'RR')
         '''
-        plot_bias(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'w',w_estimator)
+        #plot_bias(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'w',w_estimator)
+
+    '''
+        for j,mutee_j in enumerate(reference_bins_interval['z']):
+            redshift_slice(jackknife_speedup,reference,reference_rndm,unknown,unknown_rndm,cosmol, corr_tobecomputed,overwrite, verbose, pairs,
+                        min_rp,max_rp,Nbins,min_theta,max_theta,max_rpar,fact_dist, centers,njk,w_estimator,reference_bins_interval['z'],i,j)
+    '''
+    # plotting figures **************************************************
+
 #****************************************************************************************************
 #                       multiproccesing on each redshift slice
 #****************************************************************************************************
-def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite, verbose,pairs,
-                    ra_unk,dec_unk,w_unk,jck_unk,
-                    ra_unk_rndm,dec_unk_rndm,w_unk_rndm,jck_unk_rndm,
+def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_rndm,cosmol,corr_tobecomputed,overwrite, verbose,pairs,
                     min_rp,max_rp,Nbins,min_theta,max_theta ,max_rpar, fact_dist, centers,njk,w_estimator,reference_bins_interval,i,j):
+
+
+            ra_unk=np.array(unknown['RA'][unknown['bins']==i+1])
+            dec_unk=np.array(unknown['DEC'][unknown['bins']==i+1])
+            w_unk=np.array(unknown['W'][unknown['bins']==i+1])
+            jck_unk=np.array(unknown['HPIX'][unknown['bins']==i+1])
+
+
+            ra_unk_rndm=np.array(unknown_rndm['RA'][unknown_rndm['bins']==i+1])
+            dec_unk_rndm=np.array(unknown_rndm['DEC'][unknown_rndm['bins']==i+1])
+            w_unk_rndm=np.array(unknown_rndm['W'][unknown_rndm['bins']==i+1])
+            jck_unk_rndm=np.array(unknown_rndm['HPIX'][unknown_rndm['bins']==i+1])
+
+
+            if 'AC_U_P_' in corr_tobecomputed:
+                ra_unkj=np.array(unknown['RA'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
+                dec_unkj=np.array(unknown['DEC'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
+                w_unkj=np.array(unknown['W'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
+                jck_unkj=np.array(unknown['HPIX'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
+
+                ra_unk_rndmj=np.array(unknown_rndm['RA'][(unknown_rndm['bins_auto_']==j+1) & (unknown_rndm['bins']==i+1)])
+                dec_unk_rndmj=np.array(unknown_rndm['DEC'][(unknown_rndm['bins_auto_']==j+1) & (unknown_rndm['bins']==i+1)])
+                w_unk_rndmj=np.array(unknown_rndm['W'][(unknown_rndm['bins_auto_']==j+1) & (unknown_rndm['bins']==i+1)])
+                jck_unk_rndmj=np.array(unknown_rndm['HPIX'][(unknown_rndm['bins_auto_']==j+1) & (unknown_rndm['bins']==i+1)])
+
+
 
             # redshift of the slice
             if verbose:
@@ -160,6 +219,8 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
             z_ref=np.array(reference['Z'][reference['bins']==j+1])
             jck_ref=np.array(reference['HPIX'][reference['bins']==j+1])
 
+
+
             '''
             ra_ref_rndm=np.array(reference_rndm['RA'][reference_rndm['bins']==j+1])
             dec_ref_rndm=np.array(reference_rndm['DEC'][reference_rndm['bins']==j+1])
@@ -167,6 +228,8 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
             z_ref_rndm=np.array(reference_rndm['Z'][reference_rndm['bins']==j+1])
             jck_ref_rndm=np.array(reference_rndm['HPIX'][reference_rndm['bins']==j+1])
             '''
+
+
             ra_ref_rndm=np.array(reference_rndm['RA'][reference_rndm['bins']==j+1])
 
             dec_ref_rndm=np.array(reference_rndm['DEC'][reference_rndm['bins']==j+1])
@@ -233,7 +296,13 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('CC_A_',Nbins[nnn])
-                        J = Jack(w_estimator,conf,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
+
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
                         ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
                         w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,
                         'cross',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
@@ -250,8 +319,12 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('CC_P_',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
 
-                        J = Jack(w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
                         ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
                         w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
@@ -267,8 +340,13 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('CC_D_',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
 
-                        J = Jack(w_estimator,conf_density,pairs,ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,jck_unk,
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_density,pairs,ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,jck_unk,
                         jck_ref,jck_unk_rndm, jck_ref_rndm,w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'density', centers=centers,
                         njk=njk,verbose=verbose)
                         pairs = J.NNCorrelation()
@@ -282,7 +360,13 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('AC_R_D_',Nbins[nnn])
-                        J = Jack(w_estimator,conf_density, pairs, ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_density, pairs, ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'density',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
@@ -299,7 +383,11 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
                         if j==0:
-                            J_auto = Jack(w_estimator,conf,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_unk,dec_unk,
+                            label_u='U_'+str(i+1)#+'_'+str(j+1)
+                            label_ur='UR_'+str(i+1)#+'_'+str(j+1)
+                            label_r='U_'+str(i+1)#+'_'+str(j+1)
+                            label_rr='UR_'+str(i+1)#+'_'+str(j+1)
+                            J_auto = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_unk,dec_unk,
                             ra_unk_rndm,dec_unk_rndm,jck_unk,jck_unk,jck_unk_rndm,jck_unk_rndm,w_unk,w_unk,
                             w_unk_rndm,w_unk_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
@@ -314,7 +402,11 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('AC_R_A_',Nbins[nnn])
-                        J = Jack(w_estimator,conf,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
@@ -330,7 +422,11 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('AC_R_P_',Nbins[nnn])
-                        J = Jack(w_estimator,conf_physical,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
@@ -338,6 +434,27 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_P_',Nbins[nnn],i+1,j+1)
                         save_obj(path,pairs)
 
+
+                if 'AC_U_P_' in corr_tobecomputed:
+                    # 6) w_auto_REF_physical_*  **********************************************************
+                    if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_P_',Nbins[nnn],i+1,j+1)):
+                        pass
+                    else:
+                        if verbose:
+                            print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
+
+                        label_u='U_'+str(i+1)+'_'+str(j+1)
+                        label_ur='UR_'+str(i+1)+'_'+str(j+1)
+                        label_r='U_'+str(i+1)+'_'+str(j+1)
+                        label_rr='UR_'+str(i+1)+'_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unkj,dec_unkj,ra_unk_rndmj,dec_unk_rndmj,ra_unkj,dec_unkj,
+                        ra_unk_rndmj,dec_unk_rndmj,jck_unkj,jck_unkj,jck_unk_rndmj,jck_unk_rndmj,w_unkj,w_unkj,
+                        w_unk_rndmj,w_unk_rndmj,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+                        pairs = J.NNCorrelation()
+                        path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1)
+                        save_obj(path,pairs)
 
 
 
@@ -348,7 +465,12 @@ def redshift_slice(reference,reference_rndm, cosmol,corr_tobecomputed,overwrite,
                     else:
                         if verbose:
                             print'\n---> Method: {0}  - bins: {1}'.format('AC_R_R_',Nbins[nnn])
-                        J = Jack(w_estimator,conf_rp, pairs,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_rp, pairs,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'auto_rp',corr = 'NN', zu=z_ref,zr=z_ref,zur=z_ref_rndm,zrr=z_ref_rndm,centers=centers, njk=njk,verbose=verbose)
 
@@ -385,36 +507,17 @@ def plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,w_p,w_estim
                 for j in range(0,reference_bins_interval['z'].shape[0]):
 
                     if modes=='AC_U_':
-                        dict=load_obj(('./pairscount/pairs/{0}_{1}_{2}_{3}').format(modes,Nbins[nnn],i+1,1))
+                        path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format(modes,Nbins[nnn],i+1,1)
                     else:
-                        dict=load_obj(('./pairscount/pairs/{0}_{1}_{2}_{3}').format(modes,Nbins[nnn],i+1,j+1))
-                    theta=dict['theta']
-                    w=estimator(w_estimator,dict['DD'][:,0],dict['DR'][:,0],dict['RD'][:,0],dict['RR'][:,0])
-                    wjk=estimator(w_estimator,dict['DD'][:,1:],dict['DR'][:,1:],dict['RD'][:,1:],dict['RR'][:,1:])
-                    #
-                    #compute covariance
-                    average=np.zeros(w.shape[0])
-                    cov_jck=np.zeros((w.shape[0],w.shape[0]))
-                    for jj in range(njk):
-                        average+=wjk[:,jj]
-                    average=average/(njk)
+                        path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format(modes,Nbins[nnn],i+1,j+1)
 
-                    for ii in range(len(average)):
-                        for jj in range(ii+1):
-                            for kk in range(njk):
-                                cov_jck[ii,jj]+=wjk[ii,kk]*wjk[jj,kk]
+                    theta,DD_j,DR_j,RD_j,RR_j,njk=make_wz_errors(path,'jackknife',0,True)
 
-                            cov_jck[ii,jj]=(-average[ii]*average[jj]*njk+cov_jck[ii,jj])*(njk-1)/(njk)
-                            cov_jck[jj,ii]=cov_jck[ii,jj]
+                    w=estimator(w_estimator,DD_j[:,0],DR_j[:,0],RD_j[:,0],RR_j[:,0])
+                    wjk=estimator(w_estimator,DD_j[:,1:],DR_j[:,1:],RD_j[:,1:],RR_j[:,1:])
 
-                    err=np.zeros(len(cov_jck[:,0]))
-                    for ss in range(len(average)):
-                        err[ss]=np.sqrt(cov_jck[ss,ss])
-
-
-                    #vars()['ax'+str(j)]= fig.add_subplot(6,4,j+1)
-
-                    #ax[x,k].set_ylim([-0.4,1])
+                    dictu=covariance_jck(wjk[:,1:],wjk.shape[1]-1,'jackknife')
+                    err=dictu['err']
 
 
                     ax[x,k].set_xlim([0.001,10])
@@ -529,6 +632,70 @@ def plot_bias(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,w_p,w_
 
                 plt.close()
 
+            if 'AC_U_P_' in corr_tobecomputed:
+
+                bias=np.zeros((len(reference_bins_interval['z']),njk+1))
+                z_bias=reference_bins_interval['z']
+
+                for j in range(0,reference_bins_interval['z'].shape[0]):
+
+                    dict=load_obj(('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1))
+                    theta=dict['theta']
+                    #w=dict['w'][:,0]
+                    w=estimator(w_estimator,dict['DD'][:,0],dict['DR'][:,0],dict['RD'][:,0],dict['RR'][:,0])
+
+                    #wjk=dict['w'][:,1:]
+                    wjk=estimator(w_estimator,dict['DD'][:,1:],dict['DR'][:,1:],dict['RD'][:,1:],dict['RR'][:,1:])
+                    average=np.zeros(w.shape[0])
+                    cov_jck=np.zeros((w.shape[0],w.shape[0]))
+                    for jj in range(njk):
+                        average+=wjk[:,jj]
+                    average=average/(njk)
+
+                    for ii in range(len(average)):
+                        for jj in range(ii+1):
+                            for kk in range(njk):
+                                cov_jck[ii,jj]+=wjk[ii,kk]*wjk[jj,kk]
+
+                            cov_jck[ii,jj]=(-average[ii]*average[jj]*njk+cov_jck[ii,jj])*(njk-1)/(njk)
+                            cov_jck[jj,ii]=cov_jck[ii,jj]
+
+                    err=np.zeros(len(cov_jck[:,0]))
+                    for ss in range(len(average)):
+                        err[ss]=np.sqrt(cov_jck[ss,ss])
+
+                    bias[j,0]=weight_w(w,theta,err,False,1)['integr']
+                    for ik in range(njk):
+                        bias[j,ik+1]=weight_w(wjk[:,ik],theta,err,False,1)['integr']
+
+
+
+                    average=np.zeros(bias.shape[0])
+                    cov_jck=np.zeros((bias.shape[0],bias.shape[0]))
+                    for jj in range(njk):
+                        average+=bias[:,jj+1]
+                    average=average/(njk)
+
+                    for ii in range(len(average)):
+                        for jj in range(ii+1):
+                            for kk in range(njk):
+                                cov_jck[ii,jj]+=bias[ii,kk+1]*bias[jj,kk+1]
+
+                            cov_jck[ii,jj]=(-average[ii]*average[jj]*njk+cov_jck[ii,jj])*(njk-1)/(njk)
+                            cov_jck[jj,ii]=cov_jck[ii,jj]
+
+                    err_bias=np.zeros(len(cov_jck[:,0]))
+                    for ss in range(len(average)):
+                        err_bias[ss]=np.sqrt(cov_jck[ss,ss])
+
+
+
+                plt.errorbar(z_bias,bias[:,0],err_bias,fmt='o',color='black',markersize='3',elinewidth='0.5')
+                plt.savefig(('./pairscount/bias_{0}_tomobin_{1}_angularbins_{2}.pdf').format('AC_U_P_',i+1,Nbins[nnn]), format='pdf', dpi=1000)
+
+                plt.close()
+
+
             if 'AC_R_D_' in corr_tobecomputed:
 
                 bias=np.zeros(len(reference_bins_interval['z']))
@@ -571,6 +738,75 @@ def plot_bias(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,w_p,w_
 
                 plt.close()
 
+def distance_calc(unknown,reference,unknown_rndm,reference_rndm,njk,centers):
+ if not os.path.exists('./pairscount/pairs_dist/'+str(njk)+'.pkl'):
+    ra_unk_rndm=np.array(unknown_rndm['RA'])
+    dec_unk_rndm=np.array(unknown_rndm['DEC'])
+    jk_unk_rndm=np.array(unknown_rndm['HPIX'])
+
+    ra_unk=np.array(unknown['RA'])
+    dec_unk=np.array(unknown['DEC'])
+    jk_unk=np.array(unknown['HPIX'])
+
+    ra_ref_rndm=np.array(reference_rndm['RA'])
+    dec_ref_rndm=np.array(reference_rndm['DEC'])
+    jk_ref_rndm=np.array(reference_rndm['HPIX'])
+
+    ra_ref=np.array(reference['RA'])
+    dec_ref=np.array(reference['DEC'])
+    jk_ref=np.array(reference['HPIX'])
+
+    ra_m=np.hstack((ra_unk.T,ra_unk_rndm.T,ra_ref.T,ra_ref_rndm.T))
+    dec_m=np.hstack((dec_unk.T,dec_unk_rndm.T,dec_ref.T,dec_ref_rndm.T))
+    jk_m=np.hstack((jk_unk.T,jk_unk_rndm.T,jk_ref.T,jk_ref_rndm.T))
+
+    max_dist_region1=np.zeros(njk)
+
+    # convert radec to xyz
+    cosdec = np.cos(dec_m)
+    aJx_u = cosdec * np.cos(ra_m)
+    aJy_u = cosdec * np.sin(ra_m)
+    aJz_u = np.sin(dec_m)
+
+    print ('compute maximum distance for each jackknife region:')
+    start=timeit.default_timer()
+    for i in range(njk):
+        if len(ra_m[jk_m==i]) ==0 or len(dec_m[jk_m==i])==0:
+            max_dist_region1[i,j]=0.
+        else:
+
+            ra_c,dec_c=centers[i]
+
+            cosdec = np.cos(dec_c)
+            aJx_r = cosdec * np.cos(ra_c)
+            aJy_r = cosdec * np.sin(ra_c)
+            aJz_r = np.sin(dec_c)
+
+            tree_m=spatial.cKDTree(np.c_[aJx_u[jk_m==i], aJy_u[jk_m==i], aJz_u[jk_m==i]])
+
+            max_dist_m,index_dist=tree_m.query([aJx_r,aJy_r,aJz_r],k=len(ra_m[jk_m==i]))
+
+            ra_new=ra_m[jk_m==i]
+            dec_new=dec_m[jk_m==i]
+
+
+            if (len(ra_m[jk_m==i])==1):
+                max_dist_region1[i]=dist_cent_2(ra_c,dec_c,ra_new[index_dist],dec_new[index_dist])
+            else:
+                max_dist_region1[i]=dist_cent_2(ra_c,dec_c,ra_new[index_dist[-1]],dec_new[index_dist[-1]])
+        update_progress(np.float(i+1)/np.float(njk),timeit.default_timer(),start)
+    save_obj('./pairscount/pairs_dist/'+str(njk),max_dist_region1)
+
+def dist_cent_2(ra1,dec1,ra2,dec2):
+
+            todeg = np.pi/180.
+            ra1 = ra1*todeg
+            ra2 = ra2*todeg
+            dec1 = dec1*todeg
+            dec2 = dec2*todeg
+
+            cos = np.sin(dec1)*np.sin(dec2) + np.cos(dec1)*np.cos(dec2)*np.cos(ra1-ra2)
+            return np.arccos(cos)/todeg
 
 def impose_cosmology(cosmology):
     #default:

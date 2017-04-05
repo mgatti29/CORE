@@ -18,7 +18,13 @@ from .dataset import save_obj, load_obj, update_progress
 
 
 
-def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal,optimization):
+def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal,optimization,N,resampling,resampling_pairs,jk_r):
+  if resampling_pairs:
+      resampling+='_pairs'
+  else:
+      resampling+='_'
+  for i,tomo in enumerate(N.keys()):
+    print ('\nTOMO_BIN {0}'.format(int(tomo)+1))
     counter=0
     for method in best_params.keys():
         #print (method)
@@ -32,14 +38,14 @@ def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal
 
             for thetmax in range(interval_bins,Nbins[nnn]+1,step):
                 for thetmin in range(0,thetmax-interval_bins+1,step):
-                    label_save='Nz_{0}_{1}_{2}_{3}'.format(method,thetmin,thetmax,Nbins[nnn])
-                    label_save1='BNz_{0}_{1}_{2}_{3}'.format(method,thetmin,thetmax,Nbins[nnn])
+                    label_save='Nz_{0}_{1}_{2}_{3}_{4}_{5}'.format(method,thetmin,thetmax,Nbins[nnn],resampling,jk_r)
+                    label_save1='BNz_{0}_{1}_{2}_{3}_{4}_{5}'.format(method,thetmin,thetmax,Nbins[nnn],resampling,jk_r)
 
-                    try: statistics=load_obj(('./output_dndz/Nz/statistics_{0}').format(label_save))
+                    try: statistics=load_obj(('./output_dndz/TOMO_{0}/Nz/statistics_{1}').format(int(tomo)+1,label_save))
                     except: statistics=None
 
 
-                    try: BBstatistics=load_obj(('./output_dndz/Nz/statistics_{0}').format(label_save1))
+                    try: BBstatistics=load_obj(('./output_dndz/TOMO_{0}/Nz/statistics_{1}').format(int(tomo)+1,label_save1))
                     except: BBstatistics=None
 
 
@@ -77,9 +83,9 @@ def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal
         methods_label=[]
 
     # N_Z BEST
-
-        output_text=open('./output_dndz/best_Nz/bestof_'+method,'w')
-        a,b=best_methods(method,best_params[method],'stats',output_text,label_diag)
+        #method='{0}_{1}_{2}'.format(methods)
+        output_text=open('./output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/bestof_'+method,'w')
+        a,b=best_methods(method,best_params[method],'stats',output_text,label_diag,tomo,resampling,jk_r)
         if a != np.inf:
             best_mean.append(a)
             best_mean_err.append(b)
@@ -88,7 +94,7 @@ def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal
 
 
 
-        a,b=best_methods(method,best_params[method],'bb_stats',output_text,label_diag)
+        a,b=best_methods(method,best_params[method],'bb_stats',output_text,label_diag,tomo,resampling,jk_r)
         if a != np.inf:
             bbbest_mean.append(a)
             bbbest_mean_err.append(b)
@@ -110,6 +116,7 @@ def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal
 
     '''
     THIS CAN BE IMPROVED, AND PUT AS INDEPENDENT MODUL AFTER HAVING APPLIED ALSO THE GAUSSIAN PROCESSES.
+    '''
     '''
     counter_y+=2
     fig = plt.figure()
@@ -177,8 +184,8 @@ def scale_optimization(best_params,Nbins,interval_width,step_width,only_diagonal
     plt.close()
 
 
-
-def best_methods(method,best_params,stats,output_text,label_diag):
+    '''
+def best_methods(method,best_params,stats,output_text,label_diag,tomo,resampling,jk_r):
     SN=[]
     methods_label=[]
     #print label_diag,stat
@@ -208,14 +215,14 @@ def best_methods(method,best_params,stats,output_text,label_diag):
 
         #print (stats)
         if stats=='stats':
-            shutil.copy('./output_dndz/Nz/Nz_{0}_{1}_{2}_{3}.pdf'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/NZ_{0}.pdf'.format(method))
-            shutil.copy('./output_dndz/Nz/Nz_{0}_{1}_{2}_{3}.h5'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/NZ_{0}.h5'.format(method))
-            shutil.copy('./output_dndz/Nz/statistics_Nz_{0}_{1}_{2}_{3}.pkl'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/statistics_NZ_{0}.pkl'.format(method))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/Nz_{0}_{1}_{2}_{3}_{4}_{5}.pdf'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/NZ_{0}_{1}_{2}.pdf'.format(method,resampling,jk_r))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/Nz_{0}_{1}_{2}_{3}_{4}_{5}.h5'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/NZ_{0}_{1}_{2}.h5'.format(method,resampling,jk_r))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/statistics_Nz_{0}_{1}_{2}_{3}_{4}_{5}.pkl'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/statistics_NZ_{0}_{1}_{2}.pkl'.format(method,resampling,jk_r))
 
         elif stats=='bb_stats':
-            shutil.copy('./output_dndz/Nz/BNz_{0}_{1}_{2}_{3}.pdf'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/BNZ_{0}.pdf'.format(method))
-            shutil.copy('./output_dndz/Nz/BNz_{0}_{1}_{2}_{3}.h5'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/BNZ_{0}.h5'.format(method))
-            shutil.copy('./output_dndz/Nz/statistics_BNz_{0}_{1}_{2}_{3}.pkl'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins']), './output_dndz/best_Nz/statistics_BNZ_{0}.pkl'.format(method))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/BNz_{0}_{1}_{2}_{3}_{4}_{5}.pdf'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/BNZ_{0}_{1}_{2}.pdf'.format(method,resampling,jk_r))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/BNz_{0}_{1}_{2}_{3}_{4}_{5}.h5'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/BNZ_{0}_{1}_{2}.h5'.format(method,resampling,jk_r))
+            shutil.copy('./output_dndz/TOMO_'+str(int(tomo)+1)+'/Nz/statistics_BNz_{0}_{1}_{2}_{3}_{4}_{5}.pkl'.format(method,best_params[methods_label[indexu]]['thetmin'],best_params[methods_label[indexu]]['thetmax'],best_params[methods_label[indexu]]['Nbins'],resampling,jk_r), './output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/statistics_BNZ_{0}_{1}_{2}.pkl'.format(method,resampling,jk_r))
 
 
         return best_params[methods_label[indexu]][stats]['mean_rec'],best_params[methods_label[indexu]][stats]['mean_rec_err{0}'.format(label_diag)]
@@ -246,7 +253,7 @@ def make_plot_compare_all(only_diagonal):
     label_diag=''
     if only_diagonal:
         label_diag='_diag'
-    for file in os.listdir('./output_dndz/best_Nz/'):
+    for file in os.listdir('./output_dndz/TOMO_'+str(int(tomo)+1)+'/best_Nz/'):
         if file.endswith(".h5") and ('gaussian' not in file) and ('BNZ' not in file):
 
             method_label1=(file.replace(".h5", ""))

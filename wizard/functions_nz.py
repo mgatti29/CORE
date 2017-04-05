@@ -10,7 +10,7 @@ import os
 import scipy.optimize as optimization
 from scipy.optimize import fmin as simplex
 import time
-from numpy import linalg
+from scipy import linalg
 import matplotlib.mlab as mlab
 import math
 import sys
@@ -32,9 +32,169 @@ cosmol=Planck15
 #*************************************************************************
 #                 reading  trecorr files
 #*************************************************************************
+def make_wz_errors(path,resampling,number_of_bootstrap,pairs_resampling):
+    '''
+    take as an input pairs between subregions and creates resmapling and errors.
+    '''
+    pairs=load_obj(path)
+    jck_N=pairs['jck_N']
 
-def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bias_correction_Menard,bias_correction_Newman,
-                    bias_correction_Schmidt,sum_schmidt,use_physical_scale_Newman,w_estimator,verbose,label_dwn):
+    # errors ********************************
+    if resampling=='jackknife':
+        njk=pairs['DD_a'].shape[0]
+    elif resampling=='bootstrap':
+        njk=number_of_bootstrap
+
+    DD_j=np.zeros((njk+1,pairs['DD_a'].shape[1]))
+    DR_j=np.zeros((njk+1,pairs['DD_a'].shape[1]))
+    RD_j=np.zeros((njk+1,pairs['DD_a'].shape[1]))
+    RR_j=np.zeros((njk+1,pairs['DD_a'].shape[1]))
+    #print (pairs['DD'].shape,DD_j.shape)
+    ndd=(np.sum(jck_N[:,0]))*(np.sum(jck_N[:,1]))
+    ndr=(np.sum(jck_N[:,0]))*(np.sum(jck_N[:,3]))
+    nrd=(np.sum(jck_N[:,2]))*(np.sum(jck_N[:,1]))
+    nrr=(np.sum(jck_N[:,2]))*(np.sum(jck_N[:,3]))
+    norm=[1.,ndd/ndr,ndd/nrd,ndd/nrr]
+
+    DD_j[0,:],DR_j[0,:],RD_j[0,:],RR_j[0,:]=pairs['DD'],pairs['DR']*norm[1],pairs['RD']*norm[2],pairs['RR']*norm[3]
+    #****************************************
+    if resampling=='bootstrap':
+        if  os.path.exists('./output_dndz/bootstrap_indexes_{0}_{1}.pkl'.format(njk,pairs['DD_a'].shape[0])):
+            bootstrap_dict=load_obj('./output_dndz/bootstrap_indexes_{0}_{1}'.format(njk,pairs['DD_a'].shape[0]))
+        else:
+            bootstrap_dict=dict()
+            for jk in range(njk):
+
+                bootstrap_indexes=np.random.random_integers(0, pairs['DD_a'].shape[0]-1,pairs['DD_a'].shape[0])
+                bootstrap_dict.update({str(jk):bootstrap_indexes})
+            save_obj(('./output_dndz/bootstrap_indexes_{0}_{1}').format(njk,pairs['DD_a'].shape[0]),bootstrap_dict)
+
+
+    for jk in range(njk):
+        if resampling=='jackknife':
+            if pairs_resampling:
+                fact=1.
+            else:
+                fact=2.
+
+            ndd=(np.sum(jck_N[:,0])-jck_N[jk,0])*(np.sum(jck_N[:,1])-jck_N[jk,1])
+            ndr=(np.sum(jck_N[:,0])-jck_N[jk,0])*(np.sum(jck_N[:,3])-jck_N[jk,3])
+            nrd=(np.sum(jck_N[:,2])-jck_N[jk,2])*(np.sum(jck_N[:,1])-jck_N[jk,1])
+            nrr=(np.sum(jck_N[:,2])-jck_N[jk,2])*(np.sum(jck_N[:,3])-jck_N[jk,3])
+            norm=[1.,ndd/ndr,ndd/nrd,ndd/nrr]
+
+
+            DD_j[jk+1,:]=(pairs['DD'][:]-pairs['DD_a'][jk,:]-fact*pairs['DD_c'][jk,:])*norm[0]
+            #print((pairs['DD'][:]-pairs['DD_a'][jk,:]-pairs['DD_c'][jk,:])*norm[0],(pairs['DD'][:]-pairs['DD_a'][jk,:]-2.*pairs['DD_c'][jk,:])*norm[0])
+            DR_j[jk+1,:]=(pairs['DR'][:]-pairs['DR_a'][jk,:]-fact*pairs['DR_c'][jk,:])*norm[1]
+            RD_j[jk+1,:]=(pairs['RD'][:]-pairs['RD_a'][jk,:]-fact*pairs['RD_c'][jk,:])*norm[2]
+            RR_j[jk+1,:]=(pairs['RR'][:]-pairs['RR_a'][jk,:]-fact*pairs['RR_c'][jk,:])*norm[3]
+
+        elif resampling=='bootstrap':
+            bootstrap_indexes=bootstrap_dict[str(jk)]
+            N1,N2,N3,N4=0.,0.,0.,0.
+
+            if pairs_resampling:
+                fact=1.
+            else:
+                fact=0.
+
+            for boot in range(pairs['DD_a'].shape[0]):
+
+                DD_j[jk+1,:]+=pairs['DD_a'][bootstrap_indexes[boot],:]+fact*pairs['DD_c'][bootstrap_indexes[boot],:]
+                DR_j[jk+1,:]+=pairs['DR_a'][bootstrap_indexes[boot],:]+fact*pairs['DR_c'][bootstrap_indexes[boot],:]
+                RD_j[jk+1,:]+=pairs['RD_a'][bootstrap_indexes[boot],:]+fact*pairs['RD_c'][bootstrap_indexes[boot],:]
+                RR_j[jk+1,:]+=pairs['RR_a'][bootstrap_indexes[boot],:]+fact*pairs['RR_c'][bootstrap_indexes[boot],:]
+
+                N1+=jck_N[bootstrap_indexes[boot],0]
+                N2+=jck_N[bootstrap_indexes[boot],1]
+                N3+=jck_N[bootstrap_indexes[boot],2]
+                N4+=jck_N[bootstrap_indexes[boot],3]
+
+            ndd,ndr,nrd,nrr=N1*N2,N1*N4,N3*N2,N3*N4
+            norm=[1.,ndd/ndr,ndd/nrd,ndd/nrr]
+            DD_j[jk+1,:],DR_j[jk+1,:],RD_j[jk+1,:],RR_j[jk+1,:] = DD_j[jk+1,:]*norm[0],DR_j[jk+1,:]*norm[1],RD_j[jk+1,:]*norm[2],RR_j[jk+1,:]*norm[3]
+            #print (DD_j[jk+1,:],DR_j[jk+1,:])
+
+    return pairs['theta'],DD_j.T,DR_j.T,RD_j.T,RR_j.T,njk
+
+def  resampling_pairs(pairs,resampling,number_of_bootstrap):
+    pairs_scheme=pairs['pairs_scheme']
+
+    jck_N=pairs['jck_N']
+    nbins=pairs['w'].shape[0]
+    if resampling=='jackknife':
+        njk=pairs['w'].shape[1]-1
+    elif  resampling=='bootstrap':
+        njk=number_of_bootstrap
+    DD_j,DR_j,RD_j,RR_j=np.zeros((nbins,njk)),np.zeros((nbins,njk)),np.zeros((nbins,njk)),np.zeros((nbins,njk))
+
+    if resampling=='jackknife':
+        for jk in range(njk):
+            C = np.delete(pairs_scheme, jk, 0)
+            C = np.delete(C, jk, 1)
+            shp = C.shape
+            C = C.reshape(shp[0]*shp[1], shp[2], shp[3])
+            stack = np.sum(C, 0)
+            ndd=(np.sum(jck_N[:,0])-jck_N[jk,0])*(np.sum(jck_N[:,1])-jck_N[jk,1])
+            ndr=(np.sum(jck_N[:,0])-jck_N[jk,0])*(np.sum(jck_N[:,3])-jck_N[jk,3])
+            nrd=(np.sum(jck_N[:,2])-jck_N[jk,2])*(np.sum(jck_N[:,1])-jck_N[jk,1])
+            nrr=(np.sum(jck_N[:,2])-jck_N[jk,2])*(np.sum(jck_N[:,3])-jck_N[jk,3])
+            norm=[1.,ndd/ndr,ndd/nrd,ndd/nrr]
+
+            DD_j[:,jk],DR_j[:,jk],RD_j[:,jk],RR_j[:,jk] = stack[0,:]*norm[0],stack[1,:]*norm[1],stack[2,:]*norm[2],stack[3,:]*norm[3]
+
+    if resampling=='bootstrap':
+        #diagonalize the matrix (i.e.: split cross-corr pairs)
+
+        for i4 in range(pairs_scheme.shape[3]): #nbins
+            for i3 in range(pairs_scheme.shape[2]): #DD,DR,RD,RR
+                for i2 in range(pairs_scheme.shape[1]): #jck
+                    for i1 in range(pairs_scheme.shape[0]): #jck
+                        if i1!=i2:
+                            pairs_scheme[i1,i1,i3,i4]+=pairs_scheme[i1,i2,i3,i4]/2.
+                            pairs_scheme[i2,i2,i3,i4]+=pairs_scheme[i1,i2,i3,i4]/2.
+                            pairs_scheme[i1,i2,i3,i4]=0
+
+
+        #resampling indexes
+
+        if  os.path.exists('./output_dndz/bootstrap_indexes_{0}_{1}.pkl'.format(njk,pairs['w'].shape[1]-1)):
+            bootstrap_dict=load_obj('./output_dndz/bootstrap_indexes_{0}_{1}'.format(njk,pairs['w'].shape[1]-1))
+        else:
+            bootstrap_dict=dict()
+            for jk in range(njk):
+
+                bootstrap_indexes=np.random.random_integers(0, pairs['w'].shape[1]-2,pairs['w'].shape[1]-1)
+                bootstrap_dict.update({str(jk):bootstrap_indexes})
+            save_obj(('./output_dndz/bootstrap_indexes_{0}_{1}').format(njk,pairs['w'].shape[1]-1),bootstrap_dict)
+
+        for jk in range(njk):
+            bootstrap_indexes=bootstrap_dict[str(jk)]
+            #print (len(np.unique(bootstrap_indexes)))
+            #print(len(bootstrap_indexes))
+            #print(bootstrap_indexes.shape)
+            N1,N2,N3,N4=0.,0.,0.,0.
+            for boot in range(pairs['w'].shape[1]-1):
+                DD_j[:,jk]+=pairs_scheme[bootstrap_indexes[boot],bootstrap_indexes[boot],0,:]
+                DR_j[:,jk]+=pairs_scheme[bootstrap_indexes[boot],bootstrap_indexes[boot],1,:]
+                RD_j[:,jk]+=pairs_scheme[bootstrap_indexes[boot],bootstrap_indexes[boot],2,:]
+                RR_j[:,jk]+=pairs_scheme[bootstrap_indexes[boot],bootstrap_indexes[boot],3,:]
+                N1+=jck_N[bootstrap_indexes[boot],0]
+                N2+=jck_N[bootstrap_indexes[boot],1]
+                N3+=jck_N[bootstrap_indexes[boot],2]
+                N4+=jck_N[bootstrap_indexes[boot],3]
+            ndd,ndr,nrd,nrr=N1*N2,N1*N4,N3*N2,N3*N4
+            norm=[1.,ndd/ndr,ndd/nrd,ndd/nrr]
+            DD_j[:,jk],DR_j[:,jk],RD_j[:,jk],RR_j[:,jk] = DD_j[:,jk]*norm[0],DR_j[:,jk]*norm[1],RD_j[:,jk]*norm[2],RR_j[:,jk]*norm[3]
+
+
+    return DD_j,DR_j,RD_j,RR_j,njk
+
+
+
+def load_w_treecorr(methods,N,reference_bins_interval,Nbins,thetmin,thetmax,bias_correction_Menard,bias_correction_Newman,
+                    bias_correction_Schmidt,sum_schmidt,use_physical_scale_Newman,w_estimator,resampling,resampling_pairs,number_of_bootstrap,verbose):
     '''
     #It loads the correlations function computed from treecorr.
 
@@ -67,6 +227,7 @@ def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bia
 
     '''
 
+
     # Here is the description of which type of correlation is needed by each method.
     # the code will try to load the ones needed depending on the methods used.
 
@@ -74,6 +235,12 @@ def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bia
         Menard={'methods':['CC_A_','AC_R_A_']}
         Menard_physical_scales={'methods':['CC_P_','AC_R_P_']}
         Menard_physical_weighting={'methods':['CC_A_','AC_R_A_']}
+
+    elif bias_correction_Menard == 3 :
+        Menard={'methods':['CC_A_','AC_R_A_']}
+        Menard_physical_scales={'methods':['CC_P_','AC_R_P_','AC_U_P_']}
+        Menard_physical_weighting={'methods':['CC_A_','AC_R_A_']}
+
     else:
         Menard={'methods':['CC_A_']}
         Menard_physical_scales={'methods':['CC_P_']}
@@ -92,6 +259,10 @@ def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bia
         Schmidt={'methods':['CC_D_']}
     elif bias_correction_Schmidt==4:
         Schmidt={'methods':['CC_D_','AC_R_D_']}
+    elif bias_correction_Schmidt==5:
+        Schmidt={'methods':['CC_D_','AC_R_P_','AC_U_P_']}
+    elif bias_correction_Schmidt==6:
+        Schmidt={'methods':['CC_D_','AC_R_D_','AC_U_P_']}
     else :
         Schmidt={'methods':['CC_D_','AC_U_','AC_R_R_']}
 
@@ -127,87 +298,102 @@ def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bia
         print('Loading files')
     correlation=dict()
 
-    for i in range(narrow_bin_num):
+
+    for i in N.keys():
+
         redshift_dict=dict()
-        for j in range(numspecbins):
+        for j,mute in enumerate(reference_bins_interval[i]['z']):
+
             slice_method_dict=dict()
             for correlation_type in toberead:
 
                 #try:
 
                     if correlation_type=='AC_U_':
-                        pairs=load_obj(('./pairscount/pairs/{0}_{1}_{2}_{3}').format(correlation_type,Nbins,i+1,1))
+                        pairs_path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format(correlation_type,Nbins,int(i)+1,1)
 
                     else:
-                        pairs=load_obj(('./pairscount/pairs/{0}_{1}_{2}_{3}').format(correlation_type,Nbins,i+1,j+1+label_dwn))
+                        pairs_path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format(correlation_type,Nbins,int(i)+1,j+1+reference_bins_interval[i]['label_dwn'])
 
 
                     if correlation_type=='CC_D_' or correlation_type=='AC_R_D_':
-                        #In case of the density method for Schmidt, we have to sum up bins  to produce one bin estimate
-                        w_summed=np.zeros(pairs['w'].shape[1])
-                        DD_summed=np.zeros(pairs['DD'].shape[1])
-                        DR_summed=np.zeros(pairs['DR'].shape[1])
-                        RD_summed=np.zeros(pairs['RD'].shape[1])
-                        RR_summed=np.zeros(pairs['RR'].shape[1])
-                        for jck in range(w_summed.shape[0]):
+                        # Resampling
 
-                            DD_summed[jck]=np.sum(pairs['DD'][thetmin:thetmax,jck])
-                            DR_summed[jck]=np.sum(pairs['DR'][thetmin:thetmax,jck])
-                            RD_summed[jck]=np.sum(pairs['RD'][thetmin:thetmax,jck])
-                            RR_summed[jck]=np.sum(pairs['RR'][thetmin:thetmax,jck])
+                        #DD_j,DR_j,RD_j,RR_j,njk=resampling_pairs(pairs,resampling,number_of_bootstrap
+                        theta,DD_j,DR_j,RD_j,RR_j,njk=make_wz_errors(pairs_path,resampling,number_of_bootstrap,resampling_pairs)
 
+                        w=estimator(w_estimator,DD_j[:,0],DR_j[:,0],RD_j[:,0],RR_j[:,0])
+                        #*****************************************
+                        w_summed=np.zeros(njk+1)
+                        DD_summed=np.zeros(njk+1)
+                        DR_summed=np.zeros(njk+1)
+                        RD_summed=np.zeros(njk+1)
+                        RR_summed=np.zeros(njk+1)
+
+                        for jck in range(njk+1):
+
+
+                            DD_summed[jck]=np.sum(DD_j[thetmin:thetmax,jck])
+                            DR_summed[jck]=np.sum(DR_j[thetmin:thetmax,jck])
+                            RD_summed[jck]=np.sum(RD_j[thetmin:thetmax,jck])
+                            RR_summed[jck]=np.sum(RR_j[thetmin:thetmax,jck])
                             if sum_schmidt:
                                 w_summed[jck]=np.sum(pairs['w'][thetmin:thetmax,jck])
                             else:
                                 w_summed[jck]=estimator(w_estimator,DD_summed[jck],DR_summed[jck],RD_summed[jck],RR_summed[jck])
-
                         w={'label':correlation_type,
                             'basis':None,
                             'w':w_summed,
                             'err':None,
-                            'DD':w_summed,
-                            'DR':w_summed,
-                            'RD':w_summed,
-                            'RR':w_summed,
+                            'DD':DD_summed,
+                            'DR':DR_summed,
+                            'RD':RD_summed,
+                            'RR':RR_summed,
                             'estimator':w_estimator}
 
 
                     else:
-                        # compute covariance and errors.
-                        dict_cov=covariance_jck(pairs['w'][thetmin:thetmax,1:],pairs['w'].shape[1]-1)
-                        DD_dict_cov=covariance_jck(pairs['DD'][thetmin:thetmax,1:],pairs['DD'].shape[1]-1)
-                        DR_dict_cov=covariance_jck(pairs['DR'][thetmin:thetmax,1:],pairs['DR'].shape[1]-1)
-                        RD_dict_cov=covariance_jck(pairs['RD'][thetmin:thetmax,1:],pairs['RD'].shape[1]-1)
-                        RR_dict_cov=covariance_jck(pairs['RR'][thetmin:thetmax,1:],pairs['RR'].shape[1]-1)
 
+
+                        # resampling *****************************
+                        theta,DD_j,DR_j,RD_j,RR_j,njk=make_wz_errors(pairs_path,resampling,number_of_bootstrap,resampling_pairs)
+
+
+                        # compute covariance and errors
+                        DD_dict_cov=covariance_jck(DD_j[thetmin:thetmax,:],njk,resampling)
+                        DR_dict_cov=covariance_jck(DR_j[thetmin:thetmax,:],njk,resampling)
+                        RD_dict_cov=covariance_jck(RD_j[thetmin:thetmax,:],njk,resampling)
+                        RR_dict_cov=covariance_jck(RR_j[thetmin:thetmax,:],njk,resampling)
 
 
                         #'w':copy.deepcopy(pairs['w'][thetmin:thetmax,:]),
 
-                        ww=np.zeros((pairs['DD'][thetmin:thetmax,:].shape[0],pairs['DD'][thetmin:thetmax,:].shape[1]))
-                        for hh in range(pairs['DD'][thetmin:thetmax,:].shape[0]):
-                         for kk in range(pairs['DD'][thetmin:thetmax,:].shape[1]):
-                            ddw=copy.deepcopy(pairs['DD'][thetmin+hh,kk])
-                            drw=copy.deepcopy(pairs['DR'][thetmin+hh,kk])
-                            rdw=copy.deepcopy(pairs['RD'][thetmin+hh,kk])
-                            rrw=copy.deepcopy(pairs['RR'][thetmin+hh,kk])
+                        ww=np.zeros((DD_j[thetmin:thetmax,:].shape[0],njk+1))
+                        for hh in range(DD_j[thetmin:thetmax,:].shape[0]):
+                         for kk in range(njk+1):
+                            ddw=copy.deepcopy(DD_j[thetmin+hh,kk])
+                            drw=copy.deepcopy(DR_j[thetmin+hh,kk])
+                            rdw=copy.deepcopy(RD_j[thetmin+hh,kk])
+                            rrw=copy.deepcopy(RR_j[thetmin+hh,kk])
                             ww[hh,kk]=estimator(w_estimator,ddw,drw,rdw,rrw)
                             if correlation_type=='AC_R_R_':
                                 ww[hh,kk]=ww[hh,kk]*max_rpar*2.
 
+
+                        dict_cov=covariance_jck(ww[:,1:],ww.shape[1]-1,resampling)
                         w={'label':correlation_type,
-                            'basis':copy.deepcopy(pairs['theta'][thetmin:thetmax]),
+                            'basis':copy.deepcopy(theta[thetmin:thetmax]),
                             #'w':copy.deepcopy(pairs['w'][thetmin:thetmax]),
                             'w':ww,
                             'err':copy.deepcopy(dict_cov['err']),
                             'cov':copy.deepcopy(dict_cov['cov']),
-                            'DD':copy.deepcopy(pairs['DD'][thetmin:thetmax,:]),
+                            'DD':copy.deepcopy(DD_j[thetmin:thetmax,:]),
                             'DD_err':copy.deepcopy(DD_dict_cov['err']),
-                            'DR':copy.deepcopy(pairs['DR'][thetmin:thetmax,:]),
+                            'DR':copy.deepcopy(DR_j[thetmin:thetmax,:]),
                             'DR_err':copy.deepcopy(DR_dict_cov['err']),
-                            'RD':copy.deepcopy(pairs['RD'][thetmin:thetmax,:]),
+                            'RD':copy.deepcopy(RD_j[thetmin:thetmax,:]),
                             'RD_err':copy.deepcopy(RD_dict_cov['err']),
-                            'RR':copy.deepcopy(pairs['RR'][thetmin:thetmax,:]),
+                            'RR':copy.deepcopy(RR_j[thetmin:thetmax,:]),
                             'RR_err':copy.deepcopy(RR_dict_cov['err']),
                             'estimator':w_estimator}
 
@@ -217,21 +403,21 @@ def load_w_treecorr(methods,narrow_bin_num,numspecbins,Nbins,thetmin,thetmax,bia
                 #except:
                 #    print('->Exception: files missing for /SLICE_'+str(i+1)+'/optimize_new/{2}_{3}_{4}_{5}_{6}'.format(names_final,i+1,correlation_type,Nbins,thetmin,thetmax,label_dwn+j+1))
 
-            redshift_dict.update({'{0}'.format(label_dwn+j+1):slice_method_dict})
-    correlation.update({'{0}'.format(i+1):redshift_dict})
+            redshift_dict.update({'{0}'.format(reference_bins_interval[i]['label_dwn']+j+1):slice_method_dict})
+        correlation.update({'{0}'.format(i):redshift_dict})
 
 
-    return correlation,new_methods
+    return correlation,new_methods,njk
 
 
 #*************************************************************************
 #                optimization
 #*************************************************************************
 
-def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction_Newman,
+def optimize(correlation,methods,N,reference_bins_interval,bias_correction_Menard,bias_correction_Newman,
                     bias_correction_Schmidt,weight_variance,pairs_weighting,fit_free,use_physical_scale_Newman,
                     bounds_CC_fit,initial_guess_CC_fit,bounds_AC_U_fit,initial_guess_AC_U_fit,bounds_AC_R_fit,
-                    initial_guess_AC_R_fit,verbose,gamma=1,label_dwn=0):
+                    initial_guess_AC_R_fit,verbose,gamma=1):
     '''
     From a dictionary containing correlation functions, it integrates the correlation functions over the angular interval.
     In case, it applies a minimum variance weighting or fit the autocorrelation function (see below).
@@ -283,6 +469,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
         cc_newman='CC_A_'
     correlation_optimized=dict()
 
+
     for i,tomo_bin in enumerate(correlation.keys()):
         redshift_dict=dict()
         for j,reference_bin in enumerate(correlation[tomo_bin].keys()):
@@ -329,7 +516,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
                     w_weighted_bias44={'<w>':w_weighted_bias4}
                     slice_method_dict.update({'{0}bias4'.format(correlation_type):w_weighted_bias44})
 
-                if correlation_type =='CC_A_' or correlation_type =='AC_R_A_' or correlation_type=='CC_P_' or correlation_type=='AC_R_P_':
+                if correlation_type =='CC_A_' or correlation_type =='AC_R_A_' or correlation_type=='CC_P_' or correlation_type=='AC_R_P_' or correlation_type=='AC_U_P_':
 
                     w_weighted=[]
                     w_weighted_phys=[]
@@ -361,7 +548,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
                                 RD_weighted=weight_w(RD[:,ik],x,RD_err,weight_variance,gamma)['integr']
                                 RR_weighted=weight_w(RR[:,ik],x,RR_err,weight_variance,gamma)['integr']
                             mute_w=estimator(w_estimator,DD_weighted,DR_weighted,RD_weighted,RR_weighted)
-                            #mute_w=(DD_weighted-DR_weighted-RD_weighted+RR_weighted)/RR_weighted
+
                             w_weighted.append(mute_w)
 
                     else:
@@ -369,6 +556,8 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
 
                             if correlation_type =='CC_A_' or correlation_type =='AC_R_A_' and ('Menard_physical_weighting' in methods):
                                  w_weighted_phys.append(weight_phys(w[:,ik],x,err,redshift[int(reference_bin)-1],weight_variance,gamma)['integr'])
+
+
 
                             w_weighted.append(weight_w(w[:,ik],x,err,weight_variance,gamma)['integr'])
 
@@ -395,7 +584,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
 
 
 
-                    save_txt=open('./output_dndz/fit/fitparams_{0}_{1}_{2}.txt'.format(correlation_type,i,j),'w')
+                    save_txt=open('./output_dndz/TOMO_'+str(int(tomo_bin)+1)+'/fit/fitparams_{0}_{1}_{2}.txt'.format(correlation_type,i,j),'w')
                     for ik in range(w.shape[1]):
                         if correlation_type =='AC_R_R_':
                             fits=fit_rp(w[:,ik],x,cov,bounds_AC_R_fit,initial_guess_AC_R_fit)
@@ -441,7 +630,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
                     #the fit to AC_R_R_ and AC_U should have already be computed. if it is the case,
                     #use their exponent to fit the cross correlation.
 
-                    save_txt=open('./output_dndz/fit/fitparams_{0}_{1}_{2}.txt'.format(correlation_type,i,j),'w')
+                    save_txt=open('./output_dndz/TOMO_'+str(int(tomo_bin)+1)+'/fit/fitparams_{0}_{1}_{2}.txt'.format(correlation_type,i,j),'w')
                     for ik in range(w.shape[1]):
 
                         if fit_free:
@@ -470,7 +659,7 @@ def optimize(correlation,methods,redshift,bias_correction_Menard,bias_correction
                     slice_method_dict.update({'{0}fit'.format(correlation_type):w_params})
 
             redshift_dict.update({'{0}'.format(reference_bin):slice_method_dict})
-    correlation_optimized.update({'{0}'.format(tomo_bin):redshift_dict})
+        correlation_optimized.update({'{0}'.format(tomo_bin):redshift_dict})
 
     return correlation_optimized
 
@@ -705,6 +894,10 @@ def fit_rp(w,x,cov,bounds,initial):
     err=err[mask]
     x=x[mask]
 
+    mask=(err>0.00001)
+    w=w[mask]
+    err=err[mask]
+    x=x[mask]
     for i in range(w.shape[0]):
         w[i]=w[i]/x[i]
 
@@ -767,7 +960,7 @@ def minim_fun(params,xx,yy,cov,shape,index=1):
 
         return chi2
 
-def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_dwn):
+def save_fit(N,reference_bins_interval,correlation_optimized,correlation,label_save,verbose):
     '''
     It saves the fit to the CC and AC.
     '''
@@ -775,13 +968,10 @@ def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_d
     if verbose:
         print('\n**** SAVE FIT MODULE ****')
 
-
-
-    #print 'saving fit module'
     save_modes=['AC_R_R_fit','AC_U_fit','AC_R_P_fit','CC_A_fit','CC_P_fit']
     for i,tomo_bin in enumerate(correlation.keys()):
         for mode_k,save_mode in enumerate(save_modes):
-
+         if save_mode in correlation_optimized[tomo_bin][correlation_optimized[tomo_bin].keys()[0]].keys():
             #create plot:
             n_rows=int(math.ceil(len(correlation[tomo_bin].keys())/4.))
             n_cols=4
@@ -795,7 +985,7 @@ def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_d
             xx=0
 
             for j,_ in enumerate(correlation[tomo_bin].keys()):
-                reference_bin=str(xx*n_cols+kk+1+label_dwn)
+                reference_bin=str(xx*n_cols+kk+1+reference_bins_interval[tomo_bin]['label_dwn'])
                 if verbose:
                     update_progress((mode_k*len(correlation[tomo_bin].keys())+np.float(j)+1)/ (4*len(correlation[tomo_bin].keys())))
 
@@ -809,10 +999,6 @@ def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_d
                         w=copy.deepcopy(correlation[tomo_bin][reference_bin][label]['w'])
                         err=copy.deepcopy(correlation[tomo_bin][reference_bin][label]['err'])
                         ax[xx,kk].errorbar(x,w[:,0],err,color='black')
-
-                    #    a=open((output+'params0_{0}_{1}_{2}_'+label_save).format(correlation_type,tomo_bin,reference_bin),'w')
-                    #    b=open((output+'params1_{0}_{1}_{2}_'+label_save).format(correlation_type,tomo_bin,reference_bin),'w')
-                    #    c=open((output+'params2_{0}_{1}_{2}_'+label_save).format(correlation_type,tomo_bin,reference_bin),'w')
 
                         for k in range(1,w.shape[1]):
 
@@ -862,7 +1048,8 @@ def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_d
             plt.xlabel('x')
             plt.ylabel('w')
             plt.xscale('log')
-            plt.savefig((output+'{0}_{1}_'+label_save+'.pdf').format(save_mode,tomo_bin), format='pdf',dpi=1000)
+
+            plt.savefig(('./output_dndz/TOMO_'+str(int(tomo_bin)+1)+'/fit/'+'{0}_{1}_'+label_save+'.pdf').format(save_mode,tomo_bin), format='pdf',dpi=1000)
             plt.close()
 
 
@@ -872,7 +1059,7 @@ def save_fit(correlation_optimized,correlation,output,label_save,verbose,label_d
 #*************************************************************************
 
 
-def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correction_Newman,bias_correction_Schmidt,jk_r,redshift,use_physical_scale_Newman,verbose,label_dwn):
+def compute_Nz(correlation_optimized,jk_r,methods,bias_correction_Menard,bias_correction_Newman,bias_correction_Schmidt,N,reference_bins_interval,use_physical_scale_Newman,verbose):
     ''' compute the Nz for a number of methods.
 
         INPUT:
@@ -896,6 +1083,10 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
         Menard_physical_scales={'methods':['CC_P_','AC_R_P_','CC_P_bias4']}
         Menard_physical_weighting={'methods':['CC_A_weighted','AC_R_A_weighted']}
 
+    elif bias_correction_Menard == 3:
+        Menard={'methods':['CC_A_','AC_R_A_']}
+        Menard_physical_scales={'methods':['CC_P_','AC_R_P_','CC_P_bias4','AC_U_P_']}
+        Menard_physical_weighting={'methods':['CC_A_weighted','AC_R_A_weighted']}
 
     else:
         Menard={'methods':['CC_A_']}
@@ -916,6 +1107,10 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
         #Schmidt={'methods':['CC_D_','AC_U_fit','AC_R_R_fit','CC_A_fit']}
     elif bias_correction_Schmidt==4:
         Schmidt={'methods':['CC_D_','AC_R_D_']}
+    elif bias_correction_Schmidt==5:
+        Schmidt={'methods':['CC_D_','AC_R_P_','AC_U_P_']}
+    elif bias_correction_Schmidt==6:
+        Schmidt={'methods':['CC_D_','AC_R_D_','AC_U_P_']}
     elif bias_correction_Schmidt==0:
         Schmidt={'methods':['CC_D_']}
     else :
@@ -942,16 +1137,17 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                 BNz_method_dict=dict()
                 bias_method_dict=dict()
                 for i,tomo_bin in enumerate(correlation_optimized.keys()):
-                    Nz=np.zeros((len(redshift),jk_r+1))
-                    BNz=np.zeros((len(redshift),jk_r+1))
-                    bias=np.zeros((len(redshift),jk_r+1))
+                    Nz=np.zeros((len(reference_bins_interval[tomo_bin]['z']),jk_r+1))
+                    BNz=np.zeros((len(reference_bins_interval[tomo_bin]['z']),jk_r+1))
+                    bias=np.zeros((len(reference_bins_interval[tomo_bin]['z']),jk_r+1))
 
-                   # print("\nmethods: "+labels)
-                    for z,reference_bin in enumerate(redshift):
-                       # update_progress((np.float(z)+1)/ len(redshift))
+
+                    for z,reference_bin in enumerate(reference_bins_interval[tomo_bin]['z']):
+                        label_dwn=reference_bins_interval[tomo_bin]['label_dwn']
                         if labels=='Menard' or labels=='Menard_physical_scales':
 
                             for j in range(jk_r+1):
+
                                 Nz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
 
                                 if bias_correction_Menard==1:
@@ -959,6 +1155,12 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     bias[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j]
                                 elif bias_correction_Menard==2 and labels=='Menard_physical_scales':
                                     BNz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['<w>'][j]
+                                elif bias_correction_Menard==3 and labels=='Menard_physical_scales':
+
+
+                                    biass=np.sqrt(correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j]*correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][3]]['<w>'][j])
+                                    BNz[z,j]=Nz[z,j]/biass
+                                    #print (biass,redshift[z])
 
                         if labels=='Menard_phys_w':
                              for j in range(jk_r+1):
@@ -985,9 +1187,9 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                         exp=(correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['params_1'][j]+correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['params_1'][j])/2.
                                         #exp=(correlation_optimized[tomo_bin][str(z+1)][list_of_methods[labels]['methods'][3]]['params_1'][j])
 
-                                    Dc=(cosmol.hubble_distance*cosmol.inv_efunc(redshift[z])).value
+                                    Dc=(cosmol.hubble_distance*cosmol.inv_efunc(reference_bins_interval[tomo_bin]['z'][z])).value
                                     h0=special.gamma(0.5)*special.gamma((exp-1)/0.5)/special.gamma(exp*0.5)
-                                    dist=((1.+redshift[z])*cosmol.angular_diameter_distance(redshift[z]).value)**(1-exp)
+                                    dist=((1.+reference_bins_interval[tomo_bin]['z'][z])*cosmol.angular_diameter_distance(reference_bins_interval[tomo_bin]['z'][z]).value)**(1-exp)
                                     mute=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
 
                                     Nz[z,j]=Dc*mute/(dist*h0)
@@ -1001,6 +1203,7 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     Nz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
 
                                 elif bias_correction_Schmidt==3:
+
                                     Nz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
                                     BNz[z,j]=Nz[z,j]/correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j]
 
@@ -1008,6 +1211,15 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     Nz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
                                     #print (z,j,Nz[z,j],correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j])
                                     BNz[z,j]=Nz[z,j]/correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j]
+
+                                elif bias_correction_Schmidt==5 or bias_correction_Schmidt==6:
+                                    Nz[z,j]=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
+
+                                    biass=np.sqrt(correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['<w>'][j]*correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['<w>'][j])
+                                    if np.isnan(biass):
+                                        biass=1.
+
+                                    BNz[z,j]=Nz[z,j]/biass
 
 
 
@@ -1021,9 +1233,9 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     exp=(correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['params_1'][j])
 
                                     #we shall get exp from the autocorrelation. Alternately, we
-                                Dc=(cosmol.hubble_distance*cosmol.inv_efunc(redshift[z])).value
+                                Dc=(cosmol.hubble_distance*cosmol.inv_efunc(reference_bins_interval[tomo_bin]['z'][z])).value
                                 h0=special.gamma(0.5)*special.gamma((exp-1)/0.5)/special.gamma(exp*0.5)
-                                dist=((1.+redshift[z])*cosmol.angular_diameter_distance(redshift[z]).value)**(1-exp)
+                                dist=((1.+reference_bins_interval[tomo_bin]['z'][z])*cosmol.angular_diameter_distance(reference_bins_interval[tomo_bin]['z'][z]).value)**(1-exp)
                                 mute=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['params_0'][j]
                                 #print (z,mute,correlation_optimized[tomo_bin][str(z+1)][list_of_methods[labels]['methods'][0]]['params_1'][j])
                                 Nz[z,j]=mute*Dc/(dist*h0)
@@ -1049,8 +1261,8 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
 
                         for j in range(jk_r+1):
 
-                                for z,reference_bin in enumerate(redshift):
-
+                                for z,reference_bin in enumerate(reference_bins_interval[tomo_bin]['z']):
+                                    label_dwn=reference_bins_interval[tomo_bin]['label_dwn']
                                     r0_r=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['params_0'][j]
                                     exp_r=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['params_1'][j]
                                     exp_u=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['params_1'][j]
@@ -1061,8 +1273,8 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     else:
                                         exp=(correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['params_1'][j])
                                     h0=special.gamma(0.5)*special.gamma((exp-1)/0.5)/special.gamma(exp*0.5)
-                                    Dc=(cosmol.hubble_distance*cosmol.inv_efunc(redshift[z])).value
-                                    dist=((1.+redshift[z])*cosmol.angular_diameter_distance(redshift[z]).value)**(1-exp)
+                                    Dc=(cosmol.hubble_distance*cosmol.inv_efunc(reference_bins_interval[tomo_bin]['z'][z])).value
+                                    dist=((1.+reference_bins_interval[tomo_bin]['z'][z])*cosmol.angular_diameter_distance(reference_bins_interval[tomo_bin]['z'][z]).value)**(1-exp)
                                     if labels=='Schmidt':
                                         mute=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][0]]['<w>'][j]
                                     else:
@@ -1071,7 +1283,8 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     r0_new[z,j]=(((mute*Dc/(h0*dist*BNz[z,j]))**2)/(r0_r**exp_r))**(1./exp_u)
                                 r0_new_j[j]=np.mean(r0_new[:,j])
 
-                                for z,reference_bin in enumerate(redshift):
+                                for z,reference_bin in enumerate(reference_bins_interval[tomo_bin]['z']):
+                                    label_dwn=reference_bins_interval[tomo_bin]['label_dwn']
                                     r0_r=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['params_0'][j]
                                     exp_r=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][2]]['params_1'][j]
                                     exp_u=correlation_optimized[tomo_bin][str(z+1+label_dwn)][list_of_methods[labels]['methods'][1]]['params_1'][j]
@@ -1079,8 +1292,8 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
                                     r0_ur=np.sqrt((r0_r**exp_r)*(r0_u**exp_u))
                                     BNz[z,j]=Nz[z,j]/r0_ur
 
-                    Nz_method_dict.update({'{0}'.format(i+1):Nz})
-                    BNz_method_dict.update({'{0}'.format(i+1):BNz})
+                    Nz_method_dict.update({'{0}'.format(tomo_bin):Nz})
+                    BNz_method_dict.update({'{0}'.format(tomo_bin):BNz})
 
                 Nz_dict.update({'{0}'.format(labels):Nz_method_dict})
                 BNz_dict.update({'{0}'.format(labels):BNz_method_dict})
@@ -1091,7 +1304,7 @@ def compute_Nz(correlation_optimized,methods,bias_correction_Menard,bias_correct
 
     return   Nz_dict,BNz_dict
 
-def stacking(Nz_tomo,BNz_tomo,z,jk_r,zp_t):
+def stacking(Nz_tomo,BNz_tomo,jk_r,N):
 
     '''
     It stacks different tomo bins for each method,after having normalized.
@@ -1108,33 +1321,23 @@ def stacking(Nz_tomo,BNz_tomo,z,jk_r,zp_t):
     Nz=dict()
     BNz=dict()
     for method in Nz_tomo.keys():
-        uNz=np.zeros((len(z),jk_r+1))
-        uBNz=np.zeros((len(z),jk_r+1))
         for i,tomo in enumerate(Nz_tomo[method].keys()):
-            norm=len(zp_t[tomo])
+            norm=len(N[tomo]['zp_t'])/np.sum(Nz_tomo[method][tomo][:,0])
+            norm1=len(N[tomo]['zp_t'])/np.sum(BNz_tomo[method][tomo][:,0])
             for k in range(jk_r+1):
-                Nz_tomo[method][tomo][:,k]=Nz_tomo[method][tomo][:,k]*norm/np.sum(Nz_tomo[method][tomo][:,k])
-                uNz[:,k]+=Nz_tomo[method][tomo][:,k]
-
-
-
-
+                Nz_tomo[method][tomo][:,k]=Nz_tomo[method][tomo][:,k]*norm
 
                 if np.sum(BNz_tomo[method][tomo][:,k])>0.:
-                    BNz_tomo[method][tomo][:,k]=BNz_tomo[method][tomo][:,k]*norm/np.sum(BNz_tomo[method][tomo][:,k])
-                    uBNz[:,k]+=BNz_tomo[method][tomo][:,k]
+                    BNz_tomo[method][tomo][:,k]=BNz_tomo[method][tomo][:,k]*norm1#/np.sum(BNz_tomo[method][tomo][:,k])
 
-        Nz.update({'{0}'.format(method):uNz})
-        BNz.update({'{0}'.format(method):uBNz})
 
-    return Nz,BNz
+    return Nz_tomo,BNz_tomo
 
 
 #*************************************************************************
 #                 plotting & saving
 #*************************************************************************
-
-def plot(z,z_bin,zp_t_TOT,Nz,N,label_save,output,jk_r,gaussian_process,set_to_zero,mcmc_negative,only_diagonal,verbose,save_fig=1):
+def plot(resampling,reference_bins_interval,N,Nz_tomo,label_save,jk_r,gaussian_process,set_to_zero,mcmc_negative,only_diagonal,verbose,save_fig=1):
     '''
     plot the Nz and save the outputs. It also computes all the relevant statistics.
 
@@ -1160,123 +1363,118 @@ def plot(z,z_bin,zp_t_TOT,Nz,N,label_save,output,jk_r,gaussian_process,set_to_ze
 
 
 
+    for i,tomo in enumerate(Nz_tomo.keys()):
+     Nz=Nz_tomo[tomo]
+    # print (jk_r,Nz[:,1:].shape,resampling)
+     if (np.sum(Nz)>0.1):
+        dict_2=covariance_jck(Nz[:,1:],jk_r,resampling)
+        output='./output_dndz/TOMO_{0}/Nz/'.format(int(tomo)+1)
+        if save_fig==1:
+            plt.pcolor(dict_2['corr'])
+            plt.colorbar()
+            plt.savefig((output+'/cor_tot_{0}.pdf').format(label_save), format='pdf', dpi=1000)
+            plt.close()
 
 
-    #compute covariance
-    dict_2=covariance_jck(Nz[:,1:],jk_r)
-
-    if save_fig==2:
-        plt.pcolor(dict_2['corr'])
-        plt.colorbar()
-        plt.savefig((output+'/cor_tot_{0}.pdf').format(label_save), format='pdf', dpi=1000)
-        plt.close()
-
-
-
-    if gaussian_process:
-        try:
-            with Silence(stdout='gaussian_log.txt', mode='w'):
-                dict_stat_gp,rec,theta,rec1,theta1,cov_gp=gaussian_process_module(z,Nz[:,0],dict_2['err'],dict_2['cov'],N,set_to_zero)
-
-
-
-        except:
-            print ("gaussian process failed")
-            dict_stat_gp=None
-            gaussian_process=False
-    else:
-        dict_stat_gp=None
-
-    #compute statistics.
-    dict_stat=compute_statistics(z_bin,z,N,Nz[:,0],dict_2['cov'],Nz[:,1:])
-
-    if mcmc_negative:
-        Nz_corrected,sigma_dwn,sigma_up,mean_z,sigma_mean_dwn,sigma_mean_up,std_z,std_dwn,std_up=negative_emcee(z,dict_2['cov'],Nz[:,0])
-
-    if save_fig>=1:
-        fig= plt.figure()
-        ax = fig.add_subplot(111)
-        plt.hist(zp_t_TOT,bins=z_bin,color='blue',alpha=0.4,label='True distribution',histtype='stepfilled',edgecolor='None')
-
-        #colors=['red','blue','green','black','yellow']
-        #for key in N_z_dict.keys():
-        #    plt.hist(N_z_dict[key],bins=z_bin,color=colors[int(key)-1],alpha=0.4,label='Z_{0}'.format(key),histtype='step',edgecolor=colors[int(key)-1])
-
-        plt.errorbar(z,Nz[:,0],dict_2['err'],fmt='o',color='black',label='clustz')
 
         if gaussian_process:
+            try:
+                with Silence(stdout='gaussian_log.txt', mode='w'):
+                    dict_stat_gp,rec,theta,rec1,theta1,cov_gp=gaussian_process_module(z,Nz[:,0],dict_2['err'],dict_2['cov'],N[tomo]['N'],set_to_zero)
 
-            plt.plot(rec[:,0], rec[:,1], 'k', color='#CC4F1B',label='gaussian process')
-            plt.fill_between(rec[:,0], rec[:,1]-rec[:,2], rec[:,1]+rec[:,2],
+
+            except:
+                print ("gaussian process failed")
+                dict_stat_gp=None
+                gaussian_process=False
+        else:
+            dict_stat_gp=None
+
+        #compute statistics.
+        reference_bins_interval
+        dict_stat=compute_statistics(reference_bins_interval[tomo]['z_edges'],reference_bins_interval[tomo]['z'],N[tomo]['N'],Nz[:,0],dict_2['cov'],Nz[:,1:])
+
+        if mcmc_negative:
+            Nz_corrected,sigma_dwn,sigma_up,mean_z,sigma_mean_dwn,sigma_mean_up,std_z,std_dwn,std_up=negative_emcee(z,dict_2['cov'],Nz[:,0])
+
+        if save_fig>=1:
+            fig= plt.figure()
+            ax = fig.add_subplot(111)
+            plt.hist(N[tomo]['zp_t'],bins=reference_bins_interval[tomo]['z_edges'],color='blue',alpha=0.4,label='True distribution',histtype='stepfilled',edgecolor='None')
+
+
+            plt.errorbar(reference_bins_interval[tomo]['z'],Nz[:,0],dict_2['err'],fmt='o',color='black',label='clustz')
+
+            if gaussian_process:
+
+                plt.plot(rec[:,0], rec[:,1], 'k', color='#CC4F1B',label='gaussian process')
+                plt.fill_between(rec[:,0], rec[:,1]-rec[:,2], rec[:,1]+rec[:,2],
                     alpha=0.5, edgecolor='#CC4F1B', facecolor='#FF9848')
 
 
-        if mcmc_negative:
-            ytop = sigma_up-Nz_corrected
-            ybot = Nz_corrected-sigma_dwn
-            plt.errorbar(z,Nz_corrected,yerr=(ybot, ytop),fmt='o',color='red',label='mcmc corrected')
+            if mcmc_negative:
+                ytop = sigma_up-Nz_corrected
+                ybot = Nz_corrected-sigma_dwn
+                plt.errorbar(reference_bins_interval[tomo]['z'],Nz_corrected,yerr=(ybot, ytop),fmt='o',color='red',label='mcmc corrected')
 
-        plt.xlim(min(z-0.1),max(z+0.4))
-        plt.xlabel('$z$')
-        plt.ylabel('$N(z)$')
+            plt.xlim(min(reference_bins_interval[tomo]['z']-0.1),max(reference_bins_interval[tomo]['z']+0.4))
+            plt.xlabel('$z$')
+            plt.ylabel('$N(z)$')
 
 
         #put text where I want
-        mute_phi=max(Nz[:,0])
-        mute_z=max(z)
+            mute_phi=max(Nz[:,0])
+            mute_z=max(reference_bins_interval[tomo]['z'])
 
 
-        label_diag=''
-        if only_diagonal:
+            label_diag=''
+            #if only_diagonal:
             label_diag='_diag'
-        ax.text(0.8, 0.9,'<z>_pdf_bin='+str(("%.3f" % dict_stat['mean_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
-        ax.text(0.8, 0.85,'<z>_clustz='+str(("%.3f" % dict_stat['mean_rec']))+'+-'+str(("%.3f" % dict_stat['mean_rec_err'+label_diag])),fontsize=11, ha='center', transform=ax.transAxes)
-        ax.text(0.8, 0.8,'median_pdf_bin='+str(("%.3f" % dict_stat['median_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
-        ax.text(0.8, 0.75,'median_clustz='+str(("%.3f" % dict_stat['median_rec']))+'+-'+str(("%.3f" % dict_stat['median_rec_err'])),fontsize=11, ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.9,'<z>_pdf_bin='+str(("%.3f" % dict_stat['mean_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.85,'<z>_clustz='+str(("%.3f" % dict_stat['mean_rec']))+'+-'+str(("%.3f" % dict_stat['mean_rec_err'+label_diag]))+' ('+str(("%.3f" % dict_stat['mean_rec_err']))+')',fontsize=11, ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.8,'median_pdf_bin='+str(("%.3f" % dict_stat['median_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.75,'median_clustz='+str(("%.3f" % dict_stat['median_rec']))+'+-'+str(("%.3f" % dict_stat['median_rec_err'])),fontsize=11, ha='center', transform=ax.transAxes)
 
-        ax.text(0.8, 0.7,'std_pdf='+str(("%.3f" % dict_stat['std_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
-        ax.text(0.8, 0.65,'std_clustz='+str(("%.3f" % dict_stat['std_rec']))+'+-'+str(("%.3f" % dict_stat['std_rec_err'+label_diag])),fontsize=11 , ha='center', transform=ax.transAxes)
-        ax.text(0.8, 0.6,'$\chi^2/dof=$'+str(("%.3f" % dict_stat['chi_reduced'])),fontsize=11 , ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.7,'std_pdf='+str(("%.3f" % dict_stat['std_true'])),fontsize=11 , ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.65,'std_clustz='+str(("%.3f" % dict_stat['std_rec']))+'+-'+str(("%.3f" % dict_stat['std_rec_err'+label_diag]))+' ('+str(("%.3f" % dict_stat['std_rec_err']))+')',fontsize=11 , ha='center', transform=ax.transAxes)
+            ax.text(0.8, 0.6,'$\chi^2=$'+str(("%.3f" % dict_stat['chi_diag']))+' ('+str(("%.3f" % dict_stat['chi']))+') [DOF: '+str(len(Nz[:,0]))+']',fontsize=11 , ha='center', transform=ax.transAxes)
 
-        if gaussian_process:
-            ax.text(0.8, 0.55,'<z>_clustz_GP='+str(("%.3f" % dict_stat_gp['mean_rec']))+'+-'+str(("%.3f" % dict_stat_gp['mean_rec_err'+label_diag])),fontsize=11, ha='center', transform=ax.transAxes)
-            ax.text(0.8, 0.5,'std_clustz_GP='+str(("%.3f" % dict_stat_gp['std_rec']))+'+-'+str(("%.3f" % dict_stat_gp['std_rec_err'+label_diag])),fontsize=11 , ha='center', transform=ax.transAxes)
-            ax.text(0.8, 0.45,'median_clustz_GP='+str(("%.3f" % dict_stat_gp['median_rec'])),fontsize=11, ha='center', transform=ax.transAxes)
+            if gaussian_process:
+                ax.text(0.8, 0.55,'<z>_clustz_GP='+str(("%.3f" % dict_stat_gp['mean_rec']))+'+-'+str(("%.3f" % dict_stat_gp['mean_rec_err'+label_diag])),fontsize=11, ha='center', transform=ax.transAxes)
+                ax.text(0.8, 0.5,'std_clustz_GP='+str(("%.3f" % dict_stat_gp['std_rec']))+'+-'+str(("%.3f" % dict_stat_gp['std_rec_err'+label_diag])),fontsize=11 , ha='center', transform=ax.transAxes)
+                ax.text(0.8, 0.45,'median_clustz_GP='+str(("%.3f" % dict_stat_gp['median_rec'])),fontsize=11, ha='center', transform=ax.transAxes)
 
-        if mcmc_negative:
+            if mcmc_negative:
       #  mean_z,sigma_mean_dwn,sigma_mean_up
-            ax.text(0.8, 0.45,'<z>_clustz_mcmc='+str(("%.3f" % mean_z))+'+'+str(("%.3f" % sigma_mean_up))+'-'+str(("%.3f" % sigma_mean_dwn)),fontsize=11, ha='center', transform=ax.transAxes)
-            ax.text(0.8, 0.4,'std_clustz_mcmc='+str(("%.3f" % std_z))+'+'+str(("%.3f" % (std_up)))+'-'+str(("%.3f" % (std_dwn))),fontsize=11 , ha='center', transform=ax.transAxes)
+                ax.text(0.8, 0.45,'<z>_clustz_mcmc='+str(("%.3f" % mean_z))+'+'+str(("%.3f" % sigma_mean_up))+'-'+str(("%.3f" % sigma_mean_dwn)),fontsize=11, ha='center', transform=ax.transAxes)
+                ax.text(0.8, 0.4,'std_clustz_mcmc='+str(("%.3f" % std_z))+'+'+str(("%.3f" % (std_up)))+'-'+str(("%.3f" % (std_dwn))),fontsize=11 , ha='center', transform=ax.transAxes)
 
 
-        plt.legend(loc=2,prop={'size':10},fancybox=True)
+            plt.legend(loc=2,prop={'size':10},fancybox=True)
 
 
-        plt.savefig((output+'/{0}.pdf').format(label_save), format='pdf', dpi=100)
-        plt.close()
-
-
-
-
-    save_wz(Nz,dict_2['cov'],z,z_bin,(output+'/{0}.h5').format(label_save))
-
-
-
-    save_obj((output+'/statistics_{0}').format(label_save),dict_stat)
-    if gaussian_process:
-        save_obj((output+'/statistics_gauss_{0}').format(label_save),dict_stat_gp)
-
-        save_wz(rec1,cov_gp,z,z_bin,(output+'/gaussian_{0}.h5').format(label_save))
-
-
-        pd.DataFrame(rec[:,0]).to_hdf((output+'/gaussian_full_{0}.h5').format(label_save), 'results')
-        pd.DataFrame(rec[:,1:]).to_hdf((output+'/gaussian_full_{0}.h5').format(label_save), 'err')
+            plt.savefig((output+'/{0}.pdf').format(label_save), format='pdf', dpi=100)
+            plt.close()
 
 
 
 
+        save_wz(Nz,dict_2['cov'],reference_bins_interval[tomo]['z'],reference_bins_interval[tomo]['z_edges'],(output+'/{0}.h5').format(label_save))
 
 
+
+        save_obj((output+'/statistics_{0}').format(label_save),dict_stat)
+        if gaussian_process:
+            save_obj((output+'/statistics_gauss_{0}').format(label_save),dict_stat_gp)
+
+            save_wz(rec1,cov_gp,reference_bins_interval[tomo]['z'],reference_bins_interval[tomo]['z_edges'],(output+'/gaussian_{0}.h5').format(label_save))
+
+
+            pd.DataFrame(rec[:,0]).to_hdf((output+'/gaussian_full_{0}.h5').format(label_save), 'results')
+            pd.DataFrame(rec[:,1:]).to_hdf((output+'/gaussian_full_{0}.h5').format(label_save), 'err')
+
+     else:
+         dict_stat,dict_stat_gp=None,None
     return dict_stat,dict_stat_gp
 
 def gaussian_process_module(z,Nz,err,cov,N,set_to_zero):
@@ -1572,8 +1770,12 @@ def negative_emcee(z,cov,Nz):
 #                covariance & statistics
 #*************************************************************************
 
-def covariance_jck(TOTAL_PHI,jk_r):
+def covariance_jck(TOTAL_PHI,jk_r,type_cov):
+  if type_cov=='jackknife':
+      fact=(jk_r-1.)/(jk_r)
 
+  elif type_cov=='bootstrap':
+      fact=1./(jk_r)
   #  Covariance estimation
 
   average=np.zeros(TOTAL_PHI.shape[0])
@@ -1591,7 +1793,7 @@ def covariance_jck(TOTAL_PHI,jk_r):
           for kk in range(jk_r):
             cov_jck[jj,ii]+=TOTAL_PHI[ii,kk]*TOTAL_PHI[jj,kk]
 
-          cov_jck[jj,ii]=(-average[ii]*average[jj]*jk_r+cov_jck[jj,ii])*(jk_r-1)/(jk_r)
+          cov_jck[jj,ii]=(-average[ii]*average[jj]*jk_r+cov_jck[jj,ii])*fact
           cov_jck[ii,jj]=cov_jck[jj,ii]
 
   for ii in range(TOTAL_PHI.shape[0]):
@@ -1604,7 +1806,7 @@ def covariance_jck(TOTAL_PHI,jk_r):
       for j in range(TOTAL_PHI.shape[0]):
         corr[i,j]=cov_jck[i,j]/(np.sqrt(cov_jck[i,i]*cov_jck[j,j]))
 
-  average=average*(jk_r)/(jk_r-1)
+  average=average*fact
   return {'cov' : cov_jck,
           'err' : err_jck,
           'corr':corr,
@@ -1744,14 +1946,32 @@ def compute_statistics(z_edges,ztruth,N,phi_sum,cov,Njack=np.zeros((10,10))):
 
 
     # theory with covariance **************************************************
-    chi2_val=0
 
-    for i in range(len(N)):
+    N_p=Njack.shape[1]
+    p_p=N.shape[0]
+    f_hartlap=(N_p-1)/(N_p-p_p-2)
 
-       chi2_val+=(N[i] - phi_sum[i])*(N[i] - phi_sum[i])/cov[i,i]
-    chi2_val /=(len(N)-1)
 
-    return {'chi_reduced' : chi2_val,
+    cv_chol = linalg.cholesky(cov, lower=True)
+    cv_sol = linalg.solve(cv_chol, N - phi_sum, lower=True)
+    cov_1=copy.deepcopy(cov)
+    for i in range(cov.shape[0]):
+        for j in range(cov.shape[0]):
+            if i!=j:
+                cov_1[i,j]=0.
+    cv_chol_diag = linalg.cholesky(cov_1, lower=True)
+    cv_sol_diag = linalg.solve(cv_chol_diag, N - phi_sum, lower=True)
+
+
+    chi2_val_diag= np.sum(cv_sol_diag ** 2)/f_hartlap
+    chi2_val= np.sum(cv_sol ** 2)/f_hartlap
+
+
+
+
+
+    return {'chi_diag' : chi2_val_diag,
+          'chi' : chi2_val,
           'mean_true' : mean_true,
           'std_true':std_true,
           'mean_rec' : mean_bin,
