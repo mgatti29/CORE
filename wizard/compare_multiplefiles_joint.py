@@ -22,15 +22,16 @@ from routine_compare import update_progress,compute_mean1,compute_statistics,cov
 
 
 def compare(photo_z_columns,true_column,resampling,label_output,path_wz_samples,path_datasets,priors,tomo_bins,sigma='ALL',add_noise=False,shift_pz_1= None, model_kwargs = {'z0': 0.5},
-                cov_mode='diag',zmin='None',zmax='None',nwalkers=20.,nburnin=200,nrun=700,live_dangerously= False):
+                cov_mode='diag',zmin='None',zmax='None',nwalkers=20.,nburnin=200,nrun=700,live_dangerously= False,match ='chi2'):
 
 
     compare_path= './compare/'
+    label_output=label_output+'_'+match
     time0=0.
 
 
     #load clustering-z results
-    wz, wz_cov = load_wz(zmin,zmax,label_output,path_wz_samples, sigma,resampling,cov_mode=cov_mode)
+    wz, wz_cov, wz_cov_mean, wz_mean = load_wz(zmin,zmax,label_output,path_wz_samples, sigma,resampling,cov_mode=cov_mode)
 
     # load true redshift distribution in finer broad bins
     pz = load_pz(wz,shift_pz_1,path_datasets,photo_z_columns,true_column,tomo_bins,add_noise)
@@ -40,11 +41,11 @@ def compare(photo_z_columns,true_column,resampling,label_output,path_wz_samples,
 
     # create the redshift bias object
     sampler = RedshiftBiasSampler(
-        wz=wz,wz_cov=wz_cov,
+        wz=wz,wz_cov=wz_cov, wz_cov_mean=wz_cov_mean,  wz_mean= wz_mean,
         pz=pz, cov_mode=cov_mode,
         nwalkers=nwalkers, nburnin=nburnin, nrun=nrun,
         live_dangerously=live_dangerously,
-        p0=p0, mode='shift', model_kwargs=model_kwargs, priors=priors, time0=time0)
+        p0=p0, mode=match, model_kwargs=model_kwargs, priors=priors, time0=time0)
 
     # run sampler
     sampler.walk()
@@ -67,8 +68,7 @@ def compare(photo_z_columns,true_column,resampling,label_output,path_wz_samples,
             biases[nphoto*i+j] = p[3*nphoto*i+3*j]
             amplitudes[nphoto*i+j] = np.exp(-p[3*nphoto*i+3*j+1])
             spreads[nphoto*i+j] = p[3*nphoto*i+3*j+2]
-    
-    print (biases,amplitudes)
+
     for i in pz.keys():
         for j in range(int(nphoto)):
             index=j+nphoto*int(i)
@@ -210,8 +210,8 @@ def load_wz(zmin,zmax,label_output,label, sigma,resampling,cov_mode='diag'):
         wz.update({str(i):tomobin})
 
     wz_cov=make_covariance(wz,cov_mode,gaussian_process,resampling,label_output)
-
-    return wz, wz_cov
+    wz_cov_mean,means=make_covariance_mean(wz,wz_cov,label_output)
+    return wz, wz_cov,wz_cov_mean,means
 
 
 def rebin2(z_old, pdf_old, zbins):
@@ -338,6 +338,51 @@ def normalize(pdf, bins, z_min=0, z_max=10):
     return norm
 
 
+def make_covariance_mean(wz,wz_cov,path):
+    mean_cov_err=np.zeros((len(wz.keys()),len(wz.keys())))
+    means=np.zeros(len(wz.keys()))
+    len1=0
+
+    for i in wz.keys():
+        len2=0
+        for j in wz.keys():
+
+            norm_mean_bin1=0.
+            norm_mean_bin2=0.
+            mean_bin1=0.
+            mean_bin2=0.
+
+            for k in range(wz[str(j)]['wz'].shape[0]):
+                mean_bin2 += wz[str(j)]['wz'][k]*wz[str(j)]['z_centers'][k]
+                norm_mean_bin2 += wz[str(j)]['wz'][k]
+            mean_bin2=mean_bin2/norm_mean_bin2
+            means[int(j)]=mean_bin2
+            for k in range(wz[str(i)]['wz'].shape[0]):
+                mean_bin1 += wz[str(i)]['wz'][k]*wz[str(i)]['z_centers'][k]
+                norm_mean_bin1 += wz[str(i)]['wz'][k]
+            mean_bin1=mean_bin1/norm_mean_bin1
+
+            #print (mean_bin1,mean_bin2)
+            mean_cov=0.
+            for k in range(wz[str(i)]['wz'].shape[0]):
+                for w in range(wz[str(j)]['wz'].shape[0]):
+                    mean_cov+=((wz_cov[len1+k,len2+w])*(norm_mean_bin1*wz[str(i)]['z_centers'][k]-mean_bin1*norm_mean_bin1)*(norm_mean_bin2*wz[str(j)]['z_centers'][k]-mean_bin2*norm_mean_bin2))
+
+            mean_cov=mean_cov/(norm_mean_bin1*norm_mean_bin2)**2.
+            mean_cov_err[int(i),int(j)]=mean_cov
+
+            len2+=wz[str(j)]['wz'].shape[0]
+        len1+=wz[str(i)]['wz'].shape[0]
+    if path:
+        wz_cov_1=copy.deepcopy(mean_cov_err)
+        for i in range(mean_cov_err.shape[0]):
+            for j in range(mean_cov_err.shape[0]):
+                wz_cov_1[i,j]=mean_cov_err[i,j]/np.sqrt(mean_cov_err[i,i]*mean_cov_err[j,j])
+        plt.pcolor(wz_cov_1)
+        plt.colorbar()
+        plt.savefig('./compare/cov_mean_'+path+'.pdf' , format='pdf', dpi=1000)
+        plt.close()
+    return mean_cov_err,means
 
 
 def make_covariance(wz,cov_mode,gaussian_process,resampling,path=False):
@@ -508,12 +553,12 @@ class RedshiftBiasSampler(object):
     """Model a set of pz and wz as redshift bias
     """
 
-    def __init__(self, wz=None,wz_cov=None,
+    def __init__(self, wz=None,wz_cov=None,wz_cov_mean=None, wz_mean= None,
                  pz=None,
                  cov_mode='full',
                  nwalkers=64, nburnin=100, nrun=500, live_dangerously=False,
                  p0=[],
-                 mode='median',
+                 mode='chi2',
                  model_kwargs={'z0': 0.8},
                  priors={
                      'gamma': {'kind': 'uniform', 'weight': 1,
@@ -585,6 +630,8 @@ class RedshiftBiasSampler(object):
         self.wz = wz
         self.pz = pz
         self.wz_cov = wz_cov
+        self.wz_cov_mean = wz_cov_mean
+        self.wz_mean= wz_mean
 
         self.start=timeit.default_timer()
         self.mode=mode
@@ -633,8 +680,10 @@ class RedshiftBiasSampler(object):
 
         self.correct_pz_full(self.pz, self.wz, self.wz_cov, -p)
 
-        chi2 = self.evaluate(self.wz, self.pz, self.wz_cov)
-
+        if self.mode=='chi2':
+            chi2 = self.evaluate(self.wz, self.pz, self.wz_cov)
+        elif self.mode =='mean':
+            chi2 = self.evaluate_mean(self.wz_mean, self.wz,self.pz, self.wz_cov_mean)
         return -0.5 * chi2
 
     def lnprior(self, p):
@@ -656,6 +705,22 @@ class RedshiftBiasSampler(object):
         ll = np.sum(self.lnlike(p))
 
         return lp + ll
+
+    def evaluate_mean(self, wz_mean, wz, pz, wz_cov_mean):
+        pz_mean=np.zeros(len(pz.keys()))
+        for i in pz.keys():
+            mean_bin=0.
+            norm=0.
+            for k in range(wz[i]['wz'].shape[0]):
+                mean_bin +=pz[i]['pz_binned'][k]*wz[i]['z_centers'][k]
+                norm+= pz[i]['pz_binned'][k]
+            mean_bin=mean_bin/norm
+            pz_mean[int(i)]=mean_bin
+
+        cv_chol = linalg.cholesky(wz_cov_mean, lower=True)
+        cv_sol = linalg.solve(cv_chol, wz_mean - pz_mean, lower=True)
+        chi2_val = np.sum(cv_sol ** 2)
+        return np.array(chi2_val)
 
     def evaluate(self, wz, pz, cov):
 
