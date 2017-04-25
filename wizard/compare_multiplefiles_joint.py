@@ -366,7 +366,7 @@ def make_covariance_mean(wz,wz_cov,path):
             mean_cov=0.
             for k in range(wz[str(i)]['wz'].shape[0]):
                 for w in range(wz[str(j)]['wz'].shape[0]):
-                    mean_cov+=((wz_cov[len1+k,len2+w])*(norm_mean_bin1*wz[str(i)]['z_centers'][k]-mean_bin1*norm_mean_bin1)*(norm_mean_bin2*wz[str(j)]['z_centers'][k]-mean_bin2*norm_mean_bin2))
+                    mean_cov+=((wz_cov[len1+k,len2+w])*(norm_mean_bin1*wz[str(i)]['z_centers'][k]-mean_bin1*norm_mean_bin1)*(norm_mean_bin2*wz[str(j)]['z_centers'][w]-mean_bin2*norm_mean_bin2))
 
             mean_cov=mean_cov/(norm_mean_bin1*norm_mean_bin2)**2.
             mean_cov_err[int(i),int(j)]=mean_cov
