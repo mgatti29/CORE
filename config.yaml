@@ -3,13 +3,11 @@
 ######################################################################
 # what modules are we running
 run:
-     - dataset
-     - run_pairs
-     - dndz
+    # - dataset
+    # - run_pairs
+    #  - dndz
      - compare
     #- compare_noz_fom    #NOT IMPLEMENTED YET [see Pauline's module on Github]
-
-
 
 ######################################################################
 #                       verbose module
@@ -18,6 +16,7 @@ run:
 # 0: print nothing
 # 1: print only upon completing full item
 # 2: print everything
+
 verbose: 1
 
 
@@ -27,8 +26,6 @@ verbose: 1
 # All inputs are read as dictionaries, so it is important to respect the
 # identation. It produces the catalog "dataset_path_output", containing
 # unknown and reference samples correctly binned for the paircounts.
-# if "dataset_path_output" has already been computed, there is no need
-# to run this module
 
 dataset:
 
@@ -61,7 +58,7 @@ dataset:
         columns:
             ra_column: RA                           # name of RA column
             dec_column: DEC                         # name of DEC colum
-            z_photo_columns: ['Zphoto','Zphoto']             # name of photo Z columns
+            z_photo_columns: ['Zphoto']             # name of photo Z columns. !! WARNING: the first column has to be the best redshift estimate available (for AC_U_P or AC_U_D_)
             w_column: None                          # name of W column (not mandatory for randoms, could be set to None or erased)
 
 
@@ -92,7 +89,7 @@ dataset:
     reference_bins:                     #Name of the column for binning of the reference. It could be different than redshift
           name_column: Z
           type: between                 # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
-          array: [0.2,1.0,12]           # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
+          array: [0.2,1.0,8]           # the array will be numpy.linspace(min,max,numbofbins+1,endpoint=True)
                                         # if type: equal, you have to provide the edges of your bins in array (e.g. :array: [0.1,0.2,0.3,0.6,1.0])
           #type: equal
           #array: [0.1,0.2,0.3,0.5,1.0]
@@ -108,12 +105,12 @@ dataset:
 
 
     kind_regions: 'kmeans'                           # current kinds: 'kmeans' or 'healpix'
-    number_of_regions: 80                            # if kind is kmeans, number_of_region is number of regions found by kmeans
+    number_of_regions: 20                            # if kind is kmeans, number_of_region is number of regions found by kmeans
                                                      # elif kind is healpix, number_of_region is the healpix nside
     load_regions: None                               # path to the jackknifes centers. Only for kmeans. it can be left to None
 
 
-    dontsaveplot: False
+    dontsaveplot: True
 
 ######################################################################
 #                       run pairs module
@@ -121,64 +118,39 @@ dataset:
 # commands for calculating paircounts
 run_pairs:
 
-    #This version computes the cross-correlation and the autocorrelation for a number of cases.
-    #1) cross corr UNK-REF in angular bin
-    #2) cross corr UNK-REF in angular bin corresponding to given physical distances
-    #3) cross corr UNK-REF density (single bin estimation)
-    #4) auto corr UNK in angular bin for the FULL sample
-    #5) auto corr UNK in angular bin as a function of redshift. it uses z_true column to divide in bins.
-    #6) auto corr REF in angular bin
-    #7) auto corr REF in angular bin corresponding to given physical distances
-    #8) auto corr REF  density (single bin estimation)
-    #9) projected auto corr REF (physical distances)
+    #This module computes the cross-correlation and the autocorrelation for a number of cases.
 
-    #names_output:                   label :           usage - Method: Menard/Alex        Menard physical        Newman       Schmidt
-    #1) w_cross_angular_*            CC_A_                                 x       |           -           |      x     |       -
-    #2) w_cross_physical_*           CC_P_                                 -       |           x           |      -     |       -
-    #3) w_cross_density_*            CC_D_                                 -       |           -           |      -     |       x
-    #4) w_auto_UNK_                  AC_U_                                 -       |           -           |      x     |       x
-    #5) w_auto_UNK_*                 AC_U_P_                               -       |           x           |      x     |       x
-    #6) w_auto_REF_angular_*         AC_R_A_                               x       |           -           |      -     |       -
-    #7) w_auto_REF_physical_*        AC_R_P_                               -       |           x           |      x     |       x
-    #8) w_auto_REF_density_*         AC_R_D_                               -       |           x           |      x     |       x
-    #9) w_auto_REF_rp_*              AC_R_R_                               -       |           -           |      x     |       x
+    corr_tobecomputed: ['CC_P_','AC_R_P_']
 
-
-    #  if bias_correction_Menard == 1 or bias_correction_Menard == 2:
-    #      Menard={'methods':['CC_A_','AC_R_A_']}
-    #      Menard_physical_scales={'methods':['CC_P_','AC_R_P_']}
-    #      Menard_physical_weighting={'methods':['CC_A_','AC_R_A_']}
-    #  else:
-    #      Menard={'methods':['CC_A_']}
-    #      Menard_physical_scales={'methods':['CC_P_']}
-    #      Menard_physical_weighting={'methods':['CC_A_']}
-
-
-    #  if use_physical_scale_Newman:
-    #      Newman={'methods':['CC_P_','AC_U_','AC_R_R_']}
-    #  else:
-    #      Newman={'methods':['CC_A_','AC_U_','AC_R_R_']}
-
-
-    #  if bias_correction_Schmidt==3 :
-    #      Schmidt={'methods':['CC_D_','AC_R_P_']}
-    #  elif bias_correction_Schmidt==0 :
-    #      Schmidt={'methods':['CC_D_']}
-    #  elif bias_correction_Schmidt==4:
-    #      Schmidt={'methods':['CC_D_','AC_R_D_']}
-    #  elif bias_correction_Schmidt==5:
-    #      Schmidt={'methods':['CC_D_','AC_R_P_','AC_U_P_']}
-    #  else :
-    #    Schmidt={'methods':['CC_D_','AC_U_','AC_R_R_']}
+    #         possibilities (all of them are as a function of reference redshift, except for AC_U_):
+    #                 -   cross correlations:
+    #                       -  'CC_A_'    cross correlation in angular scales
+    #                       -  'CC_P_'    cross correlation in physical scales
+    #                       -  'CC_D_'    cross correlation in physical scales, but with inverse distance weighting
+    #
+    #
+    #                 -   auto correlations:
+    #                       -  'AC_U_A_'    auto correlation UNKNOWN SAMPLE in angular scales
+    #                       -  'AC_U_P_'    auto correlation UNKNOWN SAMPLE in physical scales
+    #                       -  'AC_U_D_'    auto correlation UNKNOWN SAMPLE  in physical scales but with inverse distance weighting
+    #                       -  'AC_U_'      1-bin autocorrelation UNKNOWN
+    #
+    #                       -  'AC_R_A_'    auto correlation REFERENCE SAMPLE in angular scales
+    #                       -  'AC_R_P_'    auto correlation REFERENCE SAMPLE in physical scales
+    #                       -  'AC_R_D_'    auto correlation REFERENCE  SAMPLE  in physical scales but with inverse distance weighting
+    #                       -  'AC_R_R_'    projected 3_D auto correlation REFERENCE  SAMPLE  in physical scales
+    #
+    #
+    #         Schmidt method requires CC_D_ .        bias correction: AC_D_R_ (reference), AC_D_R_ (unknown, only if unknown redshifts are REALLY good)
+    #         Menard angular scales method requires CC_A_ .         bias correction: AC_R_A_ (reference), AC_U_A_ (unknown, only if unknown redshifts are REALLY good)
+    #         Menard physical scales method requires CC_P_ .         bias correction: AC_R_P_ (reference), AC_U_P_ (unknown, only if unknown redshifts are REALLY good)
+    #         Newman method requires CC_P_ , AC_U_ ,AC_R_R_
 
     tomo_bins: ['1','2','3']     # also 'ALL'
 
-    overwrite: True             # if True, overwrite any existing files
+    overwrite: False            # if True, overwrite any existing files
 
-    corr_tobecomputed: ['CC_P_'] #,'] #,'AC_R_P_']
-
-
-    Nbins: [8]    #number of bins for the AC and CC.
+    Nbins: [8]    # number of bins for the AC and CC.
 
     min_theta: 0.001   #[degrees] min separation for the angular CC and AC
     max_theta: 0.02    #[degrees] max separation for the angular CC and AC
@@ -199,16 +171,17 @@ run_pairs:
 
     jackknife_ring: False         #   it speeds up the computation when it comes to high number of jackknives.
 
-    dontsaveplot: False
+    dontsaveplot: True
 ######################################################################
 #                       dndz module
 ######################################################################
 dndz:
 
-    #  covariances guidelines:
+    #  covariances guidelines: *********************************************************************
+    #
     #  correlated subsamples bias the covariance low.
     #  ignoring pairs between patches biases the covariance high.
-
+    #
     #  jackknife, pairs=True : split half of the pairs among different regions when removing jk_th region
     #  jackknife, pairs=False : ignore  the pairs among different regions when removing jk_th region
     #  bootstrap, pairs=True :  half of the pairs among different regions are assigned to the bootstrapped jk_th region
@@ -216,10 +189,11 @@ dndz:
 
 
 
-    resampling: bootstrap                # bootstrap or jackknife
+    resampling: jackknife                # bootstrap or jackknife
     resampling_pairs: True               # resampling over pairs rather than galaxies
     number_of_bootstrap: 200             # number of bootstrap. Ingored in jackknife.
 
+    # **********************************************************************************************
 
 
     photo_z_column: 'Zphoto'
@@ -229,52 +203,50 @@ dndz:
 
 
 
-    #  Methods used to compute the dndz.
-    #  Options:
-    #
-    #    - 'ALL' : computes all the methods, with all the possible combinations of options (weight_variance,pairs_weighting)
-    #    - 'RELIABLE' only Menard_physical_s,Newman,Schmidt, and various bias correction
-    #    - 'Menard' :  dndz from cross-correlation computed at fixed angular scales
+    #  Methods used to compute the dndz. ***************************************************************
+
+    #    - 'Menard' :                  dndz from cross-correlation computed at fixed angular scales
     #    - 'Menard_physical_scales':   dndz from cross-correlation computed at fixed physical scales
-    #    - 'Menard_physical_weighting':   dndz from cross-correlation computed at fixed angular scales,
-    #                                     but weighting scales with a factor of f(theta)= distance(theta(z))
+
     #    - 'Newman':   it uses the Newman method (fit the cross-correlation computed at fixed angular scales)
     #    - 'Schimdt' : it uses the Schmidt method (one bin estimation, counting pairs in anulus in physical scales)
 
+    methods:  ['Menard_physical_scales']
 
 
 
     # ***  Methods options ****************************************************************************
-    methods:  ['Menard_physical_scales']
 
-    # options Menard only:
-    bias_correction_Menard:  0   # 0 NO BIAS,
-                                  # bias = 1 : N(z) and bias correction just with the 1-bin estimate from AC_R_P_
-                                  # bias = 2 : divide by the autocorrelation before integrating
-                                  # bias = 3 : N(z) and bias correction using 1-bin estimato for reference and unknown.
+    # options Menard only: ******************************
+    bias_correction_reference_Menard:  'AC_R_P_'      # it can be: None, AC_R_P_  or AC_R_R_
+    bias_correction_unknown_Menard: 'None' #'AC_U_P_'        # it can be: None, AC_U_P_  or AC_U_
 
+                                                     # Note: with AC_U_, it will perform the iterative procedure a la Newman
+
+    gamma: 1.                     # exponent of the weigthing (theta**(-gamma))
     weight_variance:  False       # minimum variance weighting [Menard method only]
-    pairs_weighting:  False      # if set, it weights the pair counts (DD,DR,RD,RR) first. [Menard method only]
+    pairs_weighting:  False       # if set, it weights the pair counts (DD,DR,RD,RR) first. [Menard method only]
 
-    # options Newman only:
-    bias_correction_Newman: 1    # 0 NO BIAS, 1 , 2 . (default=1)
-                                  # bias = 1: iterative procedure to estimate b_u; bias =2 : assumes b_u = b_r
 
-    fit_free: True               # Newman: let the exponent of the cross correlation free in the fitting (defaul: False)
+    # options Newman only: ************************************************
+    bias_correction_Newman: 1     # 0 NO BIAS,
+                                  # bias = 1: iterative procedure to estimate b_u;
+
+    fit_free: True                       # Newman: let the exponent of the cross correlation free in the fitting (defaul: False)
     use_physical_scale_Newman: True     # fit the CC in physical scales rather than angular scales (defaul: False)
 
 
-    # options Schmidt only:
-    bias_correction_Schmidt: 0    # 0 NO BIAS (standard), 1 , 2 , 3 , 4 , 5
-                                  # bias = 1: iterative procedure to estimate b_u, a la Newman ; [noisy!]
-                                  # bias = 2 : A la Newman correction, but assuming b_u = b_r ; [noisy!]
-                                  # bias = 3: N(z) and bias correction just with the 1-bin estimate from AC_R_P_
-                                  # bias = 4: N(z) and bias correction just with the 1-bin estimate from AC_R_D
-                                  # bias = 5: N(z) and bias correction using 1-bin estimato for reference and unknown.
+
+    # options Schmidt only:  ******************************
+    bias_correction_reference_Schmidt: 'AC_R_D_'      # it can be: None, AC_R_D_ or AC_R_R_
+    bias_correction_unknown_Schmidt: 'None' #'AC_U_D_'        # it can be: None, AC_U_D_ or AC_U_
+
+                                                      # Note: with AC_U_, it will perform the iterative procedure a la Newman
 
 
-    # options Newman & Schmidt
-    show_fit: True                # if true, it saves the fit for CC and AC
+
+    # options Newman & Schmidt ******************************
+    show_fit: False                # if true, it saves the fit for CC and AC
 
 
     # bounds format: [[min_amplitude, min_index, min_constant],[min_amplitude, min_index, min_constant]]
@@ -289,10 +261,7 @@ dndz:
 
     # *** General options ****************************************************************************
 
-
     w_estimator: 'Natural_noRu'             # which estimator to use for the w(theta)
-
-
 
     only_diagonal:  True          # when it comes to compute statistics, it considers only the diagonal.
     verbose:  False
@@ -307,14 +276,12 @@ dndz:
     # ***  Regularizations options  **************************************************************************
     # this will apply only to the dndz with and without bias correction that have proven to have the best S/N
 
-    regularization: False                           # if set, it will correct for negative point and fit the dndz
+    regularization: False                         # if set, it will correct for negative point and fit the dndz
     set_negative_to_zero:  fixed                     # set negative values to zero; none, fixed, mcmc
-    fit: None                           # choose between None, gaussian_processes
+    fit: gaussian_match_pdf                           # choose between None, gaussian_processes,gaussian_match_pdf
     prior_gaussian_process: None    #[1.53689698e+04  , 1.68542771e-01]
 
 # *****************************************************************************************************************************
-
-
 
 ###############################################################################
 #                               COMPARE MODULE
@@ -323,17 +290,18 @@ dndz:
 # compare takes input n(z) and does simple redshift bias model fitting
 compare:
 
-    label_output: 'Menard_boot200'
+    label_output: 'Menard_bias_corrected'
 
     tomo_bins: ['1','2','3']  #tomobins as assumed in the dataset file.
 
-    photo_z_columns: ['Zphoto','Zphoto']  #   it will avergae the photo-z predictions over these columns
+    photo_z_columns: ['Zphoto'] #,'Zphoto']  #   it will avergae the photo-z predictions over these columns
     true_column:     'Zphoto'           #   it will compute the residual shifts over this
 
-    path_wz_samples: ['./output_dndz/TOMO_1/best_Nz/NZ_Menard_physical_scales____bootstrap_pairs_200','./output_dndz/TOMO_2/best_Nz/NZ_Menard_physical_scales____bootstrap_pairs_200','./output_dndz/TOMO_3/best_Nz/NZ_Menard_physical_scales____bootstrap_pairs_200']
+    path_wz_samples: ['./output_dndz/TOMO_1/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20','./output_dndz/TOMO_2/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20','./output_dndz/TOMO_3/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20']
 
     path_datasets: ['./pairscount/','./pairscount/','./pairscount/']
 
+    match: 'mean'  #mean or chi2
     # priors ******************************************************************************
     #
     # priors have to be in the form of priors: {'tomo1': priors_tomo1, 'tomo2': priors_tomo2 ... 'tomoN': priors_tomoN, 'gamma': gamma}.
@@ -355,30 +323,13 @@ compare:
 
                           # 3RD TOMOGRAPHIC BIN ************
                           'tomo3' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                    'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}}, #, #,
-                                    #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
+                                    'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}}}#
 
-             'photo_z2' : {
-                          # 1ST TOMOGRAPHIC BIN ************
-                            'tomo1' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                      'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}, #,
-                                      #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
-
-                        # 2ND TOMOGRAPHIC BIN ************
-                            'tomo2' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                      'amplitude'  : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}, #,
-                                      #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
-
-                        # 3RD TOMOGRAPHIC BIN ************
-                             'tomo3' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                      'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}}, #, #,
-                                    #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
-            }
     # **************************************************************************************
-    sigma: 'all'            #this selects wz dndz only in the interval mean(wz) +- sigma *std. all option available
+    sigma: all            #this selects wz dndz only in the interval mean(wz) +- sigma *std. all option available
     zmin: 'None'
     zmax: 'None'
-    add_noise: False         #it adds random noise to the true distribution (for sims only and photoz)
+    add_noise: True         #it adds random noise to the true distribution (for sims only and photoz)
 
     shift_pz_1: [0.,0.,0.]          #this applies a shift to the true distribution beforehand
     model_kwargs: {'z0': 0.5}
@@ -386,8 +337,8 @@ compare:
     resampling: bootstrap
     # mcmc options **************************************
 
-    cov_mode: 'diag'
-    nwalkers: 10
+    cov_mode: '2off_diag'
+    nwalkers: 30
     nburnin: 20
     nrun: 30
     live_dangerously: False,
