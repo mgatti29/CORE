@@ -357,39 +357,27 @@ class Jack(object):
 
             mask=np.in1d(jk_a,i)
             #print ('dio',np.unique(jk_a[mask]),i)
-            if self.mode=='auto_rp':
-                cat_a = treecorr.Catalog(ra=ra_a[mask], dec=dec_a[mask],r=z_a[mask], ra_units='deg', dec_units='deg',w=self.weight_u[mask])
-            else:
-                cat_a = treecorr.Catalog(ra=ra_a[mask], dec=dec_a[mask], ra_units='deg', dec_units='deg',w=self.weight_u[mask])
-        except RuntimeError:
+            cat_a = treecorr.Catalog(ra=ra_a[mask], dec=dec_a[mask], ra_units='deg', dec_units='deg',w=self.weight_u[mask])
+        except:
             cat_a = None
         try:
             mask=np.in1d(jk_b,j)
             #print ('diob',np.unique(jk_b[mask]),j)
-            if self.mode=='auto_rp':
 
-                cat_b = treecorr.Catalog(ra=ra_b[mask], dec=dec_b[mask],r=z_b[mask], ra_units='deg', dec_units='deg',w=self.weight_r[mask])
-            else:
-                cat_b = treecorr.Catalog(ra=ra_b[mask], dec=dec_b[mask], ra_units='deg', dec_units='deg',w=self.weight_r[mask])
+            cat_b = treecorr.Catalog(ra=ra_b[mask], dec=dec_b[mask], ra_units='deg', dec_units='deg',w=self.weight_r[mask])
 
-        except RuntimeError:
+        except:
             cat_b = None
 
 
         try:
             mask=np.in1d(jk_rb,j)
-            if self.mode=='auto_rp':
-                cat_rb = treecorr.Catalog(ra=ra_rb[mask], dec=dec_rb[mask],r=z_rb[mask], ra_units='deg', dec_units='deg',w=self.weight_rr[mask])
-            else:
-                cat_rb = treecorr.Catalog(ra=ra_rb[mask], dec=dec_rb[mask], ra_units='deg', dec_units='deg',w=self.weight_rr[mask])
+            cat_rb = treecorr.Catalog(ra=ra_rb[mask], dec=dec_rb[mask], ra_units='deg', dec_units='deg',w=self.weight_rr[mask])
         except:
             cat_rb=None
         try:
             mask=np.in1d(jk_ra,i)
-            if self.mode=='auto_rp':
-                cat_ra = treecorr.Catalog(ra=ra_ra[mask], dec=dec_ra[mask],r=z_ra[mask], ra_units='deg', dec_units='deg',w=self.weight_ur[mask])
-            else:
-                cat_ra = treecorr.Catalog(ra=ra_ra[mask], dec=dec_ra[mask], ra_units='deg', dec_units='deg',w=self.weight_ur[mask])
+            cat_ra = treecorr.Catalog(ra=ra_ra[mask], dec=dec_ra[mask], ra_units='deg', dec_units='deg',w=self.weight_ur[mask])
         except:
             cat_ra=None
 
@@ -402,7 +390,7 @@ class Jack(object):
         rd = treecorr.NNCorrelation(self.conf)
         rr = treecorr.NNCorrelation(self.conf)
 
-        if cat_a is not None and cat_b is not None:
+        if not ((cat_a == None) or (cat_b == None)):
             if self.mode=='auto_rp':
                 if 'DD' in self.pairs_select:
                     dd.process(cat_a, cat_b,metric='Rperp')
@@ -410,7 +398,7 @@ class Jack(object):
                 if 'DD' in self.pairs_select:
                     dd.process(cat_a, cat_b)
 
-        if cat_a is not None and cat_rb is not None:
+        if not ((cat_a == None) or (cat_rb == None)):
             if self.mode=='auto_rp':
                 if 'DR' in self.pairs_select:
                     dr.process(cat_a, cat_rb,metric='Rperp')
@@ -418,7 +406,7 @@ class Jack(object):
                 if 'DR' in self.pairs_select:
                     dr.process(cat_a, cat_rb)
 
-        if cat_ra is not None and cat_b is not None:
+        if not ((cat_ra == None) or (cat_b == None)):
             if self.mode=='auto_rp':
                 if 'RD' in self.pairs_select:
                     rd.process(cat_ra, cat_b,metric='Rperp')
@@ -426,18 +414,22 @@ class Jack(object):
                 if 'RD' in self.pairs_select:
                     rd.process(cat_ra, cat_b)
 
-        if cat_ra is not None and cat_rb is not None:
+        if not ((cat_ra == None) or (cat_rb == None)):
             if self.mode=='auto_rp':
                 if 'RR' in self.pairs_select:
                     rr.process(cat_ra, cat_rb,metric='Rperp')
             else:
                 if 'RR' in self.pairs_select:
                     rr.process(cat_ra, cat_rb)
-        pairs = {'theta': np.exp(dd.logr), 'DD': dd.weight, 'DR': dr.weight, 'RD': rd.weight, 'RR': rr.weight}
-
+        try:
+            pairs = {'theta': np.exp(dd.logr), 'DD': dd.weight, 'DR': dr.weight, 'RD': rd.weight, 'RR': rr.weight}
+        except:
+            pairs =  {'theta': np.zeros(self.conf['nbins']), 'DD': np.zeros(self.conf['nbins']), 'DR': np.zeros(self.conf['nbins']), 'RD': np.zeros(self.conf['nbins']), 'RR': np.zeros(self.conf['nbins'])}
 
 
         return dic(pairs)
+
+
 
     def dist_cent_2(self,ra1,dec1,ra2,dec2):
 
