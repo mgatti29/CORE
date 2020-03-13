@@ -8,6 +8,52 @@ import pdb
 import pickle
 import shutil
 from scipy.interpolate import UnivariateSpline
+
+def covariance_jck(TOTAL_PHI,jk_r,type_cov):
+  if type_cov=='jackknife':
+      fact=(jk_r-1.)/(jk_r)
+
+  elif type_cov=='bootstrap':
+      fact=1./(jk_r)
+  #  Covariance estimation
+
+  average=np.zeros(TOTAL_PHI.shape[0])
+  cov_jck=np.zeros((TOTAL_PHI.shape[0],TOTAL_PHI.shape[0]))
+  err_jck=np.zeros(TOTAL_PHI.shape[0])
+
+
+  for kk in range(jk_r):
+    average+=TOTAL_PHI[:,kk]
+  average=average/(jk_r)
+
+ # print average
+  for ii in range(TOTAL_PHI.shape[0]):
+     for jj in range(ii+1):
+          for kk in range(jk_r):
+            cov_jck[jj,ii]+=TOTAL_PHI[ii,kk]*TOTAL_PHI[jj,kk]
+
+          cov_jck[jj,ii]=(-average[ii]*average[jj]*jk_r+cov_jck[jj,ii])*fact
+          cov_jck[ii,jj]=cov_jck[jj,ii]
+
+  for ii in range(TOTAL_PHI.shape[0]):
+   err_jck[ii]=np.sqrt(cov_jck[ii,ii])
+ # print err_jck
+
+  #compute correlation
+  corr=np.zeros((TOTAL_PHI.shape[0],TOTAL_PHI.shape[0]))
+  for i in range(TOTAL_PHI.shape[0]):
+      for j in range(TOTAL_PHI.shape[0]):
+        corr[i,j]=cov_jck[i,j]/(np.sqrt(cov_jck[i,i]*cov_jck[j,j]))
+
+  if type_cov=='bootstrap':
+    average=average
+  else:
+    average=average*fact
+  return {'cov' : cov_jck,
+          'err' : err_jck,
+          'corr':corr,
+          'mean':average}
+
 def rebin(z_old, pdf_old, zbins):
         # spline
         kwargs_spline = {'s': 0,  # force spline to go through data points
@@ -106,16 +152,22 @@ def setup(options):
     wz_data['mean_eboss'] = options.get_bool(option_section, "mean_eboss", False)
     wz_data['std_rm'] = options.get_bool(option_section, "std_rm", False)
     wz_data['magnif'] = options.get_bool(option_section, "magnif", False)
+    wz_data['full_shape'] = options.get_bool(option_section, "full_shape", False)
 
-    print (wz_data['mean_rm'] )
-    print (wz_data['mean_eboss'])
-    print (wz_data['std_rm'] )
-    print (wz_data['magnif'] )
+    print ('*****WZ CONFIG ******')
+    print ('mean_rm ',wz_data['mean_rm'] )
+    print ('mean_eboss ',wz_data['mean_eboss'])
+    print ('std_rm ',wz_data['std_rm'] )
+    print ('magnif ',wz_data['magnif'] )
     
     wz_data['rmg'] = rmg
     wz_data['pz'] = pz
     config_data = wz_data
     return config_data
+
+
+
+
 
 def execute(block, config):
     magnif = config['magnif']
@@ -167,7 +219,8 @@ def execute(block, config):
     alpha4 = block["mag_alpha_lens", "alpha_4"]
     alpha5 = block["mag_alpha_lens", "alpha_5"]
 
-     
+
+    
     alph = np.array([alpha1,alpha2,alpha3,alpha4,alpha5])
      
     
@@ -204,75 +257,125 @@ def execute(block, config):
             bin_name = "bin_%d" % i
             nz = block[pz, bin_name]
             
-            if(mean_eboss == True):
-                # bin nz of in the wz bins ******
-                nz_rebin_eboss = rebin(z, nz, bin_edges_eboss)
-                
-                mask_sigma_eboss = (bincenters_eboss > (compute_mean(bincenters_eboss,nz_rebin_eboss) -2.*compute_std(bincenters_eboss,nz_rebin_eboss))) & (bincenters_eboss < (compute_mean(bincenters_eboss,nz_rebin_eboss) + 2.*compute_std(bincenters_eboss,nz_rebin_eboss)))
-                
-                mean_true_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
-                std_true_z_eboss = compute_std(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
-
-                
-            # bin nz of in the wz bins ******
+            # rebin *********************
             nz_rebin = rebin(z, nz, bin_edges_rm)
-
-            mask_sigma = (bincenters_rm > (compute_mean(bincenters_rm,nz_rebin) -2.*compute_std(bincenters_rm,nz_rebin))) & (bincenters_rm < (compute_mean(bincenters_rm,nz_rebin) + 2.*compute_std(bincenters_rm,nz_rebin)))
+            try:
+                nz_rebin_eboss = rebin(z, nz, bin_edges_eboss)
+            except:
+                pass
             
-            mean_true_z = compute_mean(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
-            std_true_z = compute_std(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
-                
-                
+            # 2 sigma mask ******************
+            mask_sigma = (bincenters_rm > (compute_mean(bincenters_rm,nz_rebin) -2.*compute_std(bincenters_rm,nz_rebin))) & (bincenters_rm < (compute_mean(bincenters_rm,nz_rebin) + 2.*compute_std(bincenters_rm,nz_rebin)))
+            try:
+                mask_sigma_eboss = (bincenters_eboss > (compute_mean(bincenters_eboss,nz_rebin_eboss) -2.*compute_std(bincenters_eboss,nz_rebin_eboss))) & (bincenters_eboss < (compute_mean(bincenters_eboss,nz_rebin_eboss) + 2.*compute_std(bincenters_eboss,nz_rebin_eboss)))
+            except:
+                pass
+            
+            
+            # compute NZ ************************
+            
             bbb = block['bias_wl', 'bin_%d' % i]
             aaa = block['mag_alpha_wl', 'alpha_%d' % i]
 
             
             if(magnif == True): 
-                theory_Nz = np.array(Nz_rm[i-1,:]-bbb*(alpha_mag_rm-2.)*mag_pos1[i-1,:]-(aaa-2.)*bias_rm[i-1,:]*mag_pos[i-1,:])/(bias_rm[i-1,:]*th_correction)
+                theory_Nz = np.array([np.array(Nz_rm[i-1,:,jk]-bbb*(alpha_mag_rm-2.)*mag_pos1[i-1,:]-(aaa-2.)*bias_rm[i-1,:,jk]*mag_pos[i-1,:])/(bias_rm[i-1,:,jk]*th_correction) for jk in range((Nz_rm.shape[2]))]).T
                 
-        
             else:
-                theory_Nz = np.array(Nz_rm[i-1,:])/(bias_rm[i-1,:]*th_correction)
-           
+                theory_Nz = np.array([np.array(Nz_rm[i-1,:,jk])/(bias_rm[i-1,:,jk]*th_correction) for jk in range((Nz_rm.shape[2]))]).T
+                
+            try:
+                theory_Nz_eboss = np.array([Nz_eboss[i-1,:,jk]/(bias_eboss[i-1,:,jk]*th_correction_eboss) for jk in range((Nz_eboss.shape[2]))]).T
+                
+            except:
+                pass
+            # *******************
+            
+            if (( mean_rm == True) and (mean_eboss == True)):
+                mean_true_z = compute_mean(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
+                mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])**2
+                mean_true_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
+                mean_clustering_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], theory_Nz_eboss[mask_sigma_eboss,0])
 
-            
-            
-            
-            if(mean_rm == True):
-                mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma])
-                std_clustering_z_rm = compute_std(bincenters_rm, theory_Nz)
-                like_mean_rm  = -0.5*((mean_true_z-mean_clustering_z_rm)/config['syst_mean_rm'][i-1])**2
-            
-                print ('mean_true_z ', mean_true_z)
-                print ('mean_clustering_z_rm', mean_clustering_z_rm)
-            
-                like_tot+=like_mean_rm
-            
-            if(mean_eboss == True):
-                theory_Nz_eboss = np.array(Nz_eboss[i-1,:])/(bias_eboss[i-1,:]*th_correction_eboss)
-                mean_clustering_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], theory_Nz_eboss[mask_sigma_eboss])
-                std_clustering_z_eboss = compute_std(bincenters_eboss, theory_Nz_eboss)
-                like_mean_eboss  = -0.5*((mean_true_z_eboss-mean_clustering_z_eboss)/config['syst_mean_eboss'][i-1])**2
-                print ('mean_true_z_eboss ', mean_true_z_eboss)
-                print ('mean_clustering_z_eboss', mean_clustering_z_eboss)
-            
-                like_tot+=like_mean_eboss
+                y = np.array([mean_true_z- mean_clustering_z_rm,mean_true_z_eboss-mean_clustering_z_eboss])
+                ccov = config['cross_cov'][i-1]
+                like_tot+=-0.5*np.sum(np.matmul(y,np.matmul(np.linalg.inv(ccov),y)))
+                
+                
+            else:
+                
+                if( mean_rm == True):
+
+                    mean_true_z = compute_mean(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
+
+                    mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])**2
+
+                    print ('mean_true_z ', mean_true_z)
+                    print ('mean_clustering_z_rm', mean_clustering_z_rm)
+
+                    like_tot+=like_mean_rm
+
+                if(mean_eboss == True):
+
+                    mean_true_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
+                    #std_true_z_eboss = compute_std(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
+
+                    mean_clustering_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], theory_Nz_eboss[mask_sigma_eboss,0])
+
+
+                    #std_clustering_z_eboss = compute_std(bincenters_eboss, theory_Nz_eboss)
+                    like_mean_eboss  = -0.5*((mean_true_z_eboss-mean_clustering_z_eboss)/config['syst_mean_eboss'][i-1])**2
+                    print ('mean_true_z_eboss ', mean_true_z_eboss)
+                    print ('mean_clustering_z_eboss', mean_clustering_z_eboss)
+
+                    like_tot+=like_mean_eboss
                 
             if (std_rm == True):
-                #like_std_rm = norm.pdf(std_true_z,std_clustering_z_rm,config['syst_std_rm'][i-1])
+                
+                std_true_z = compute_std(bincenters_rm, nz_rebin )
+                std_clustering_z_rm = compute_std(bincenters_rm, theory_Nz[:,0])
                 like_std_rm =  -0.5*((std_true_z-std_clustering_z_rm)/config['syst_std_rm'][i-1])**2
+                
                 print ('std_true_z_rm ', std_true_z)
                 print ('std_clustering_z_rm', std_clustering_z_rm)
             
-                #like_mean_eboss= norm.pdf(mean_true_z,mean_clustering_z_eboss,syst_err_eboss)
                 like_tot+= like_std_rm
-                #store likelihood in block
-
+                
                 
             # Gary's likelihood.
+            if config['full_shape']:
+                
+                # compute covariance ***********
+                try:
+                    mute = covariance_jck(theory_Nz_eboss[:,1:],theory_Nz_eboss[:,1:].shape[1],'jackknife')
+                    err_eboss = mute['err']
+                except:
+                    pass
+                mute = covariance_jck(theory_Nz[:,1:],theory_Nz[:,1:].shape[1],'jackknife')
+                err_rm = mute['err']   
+                
+                
+                # multiply for the prior1
+                
+                params1=np.array([1.,block["wz_nuisance_parameters", "c{0}_2".format(i)],block["wz_nuisance_parameters", "c{0}_2".format(i)]])
+                poly1 = np.polynomial.Polynomial(params1)
+                sfx = poly1(config['shape_mode']['err'][i-1]['xn'])
+                
+                # normalisation in the 2sigma interval
+                
+                
+                
+                normy = np.sum((nz_rebin*sfx)[mask_sigma])
+                normwz = np.sum(theory_Nz[mask_sigma,0])
+                y =(nz_rebin*sfx)/normy-theory_Nz[:,0]/normwz
+                
 
-    
-
+                like_tot+=-0.5*np.sum(((y )/(err_rm/normwz) )**2)
+                
+                #-poly1(xn)[mean_i]+1
+            #ax[2,i].plot(x,yy3, linestyle = 'dashed',color='grey',alpha=0.3)
+            
+        
     block[names.likelihoods, 'wz_like'] = like_tot
 
 
@@ -280,4 +383,5 @@ def execute(block, config):
 
 def cleanup(config):
     pass
+
 

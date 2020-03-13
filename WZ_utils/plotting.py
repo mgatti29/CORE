@@ -229,12 +229,15 @@ def plota1(ax,data,lab='',cl='b' , i=0,tht = None, normed = False,bias = False, 
             norm = np.trapz(vector[mask,0],z_ref[mask])
             mute_dict1["final"] = vector[mask,0]/norm
             mute_dict1["final_jck"] = vector[mask,1:]/norm
+            mute_dict1["final_full"] = vector[:,0]/norm
+            mute_dict1["final_full_jck"] = vector[:,1:]/norm
         
             mute_dict1["dz"] = z_ref[mask]-means
             mute_dict1["dz_n"] = z_ref-means
             mute_dict1["z_ref"] = z_ref
             mute_dict1["mask"] = mask
             mute_dict1["truth"] = tht[i,mask]/np.trapz(tht[i][mask],z_ref[mask])
+            mute_dict1["truth_full"] = tht[i,:]/np.trapz(tht[i][mask],z_ref[mask])
             
             means = compute_mean(z_ref[mask],vector[mask,0])-compute_mean(z_reft[mask],tht[i][mask])
             
@@ -326,3 +329,62 @@ def compute_bias(data,theory,i):
     
 def compute_th_correction(true_nz,theory,i):
         return np.array(theory[i, :]/true_nz[i,:])
+    
+    
+class SmoothFunction:
+    def __init__(self, mean=1., rms=[0.1,0.1,0.1,0.1,0.1],
+                range=(-1.,1.), buffer=True):
+        '''The smooth function will be a sum of Legendre polynomials.
+        The function will have the specified (deterministic) mean, and
+        then a sum of Legendre polynomials with coefficients each drawn
+        from a Gaussian distribution.  The rms array specifies the RMS 
+        variation in the function across the range that will be contributed
+        by each order of Legendre.  The size of the rms array gives the
+        max order of Legendre polynomial. 
+          If buffer=True, the range and RMS will be adjusted internally to
+        keep the excess-RMS regions near the Legendre endpoints out of your
+        desired range'''
+        self.mean = mean
+        self.order = len(rms)
+        # The sigmas that will be needed to give each order 
+        # of Lagrange the desired RMS:
+        self.sigma = np.sqrt((2*np.arange(self.order)+1)/2.)*np.array(rms)
+        # Values to use to rescale input range to (-1,1)
+        self.xmid = 0.5*(range[0]+range[1])
+        self.xscale = 2. / (range[1]-range[0])
+        if buffer:
+            self.xscale *= 0.85
+            self.sigma /= 0.76
+        self.coefficients = np.zeros(self.order,dtype=float)
+        # Next item is the log of Gaussian prefactor for probabilities
+        self.logProbNorm = -0.5*self.order*np.log(2*np.pi) - np.sum(np.log(self.sigma))
+        return
+    def sample(self):
+        # Sample a new set of coefficients 
+        self.coefficients = np.random.normal(size=self.order)*self.sigma
+        return
+    def setCoefficients(self,coefficients):
+        # Set coefficients to the given vector.
+        # Returns the log(probability) of these coefficients
+        cc = np.array(coefficients)
+        if cc.size != self.sigma.size:
+            raise ValueError("coefficients size does not match variance dimensions")
+        self.coefficients = cc
+        return self.logProbNorm - 0.5*np.sum((self.coefficients/self.sigma)**2)
+    def __call__(self,x):
+        # Return the value of the function at the array of values x
+        # First remap the inputs to (-1,1)
+        xx = (np.array(x)-self.xmid)*self.xscale
+        # Create output array
+        out = np.ones_like(xx) * self.mean
+        # And two arrays to use in Legendre recurrence
+        pm1 = np.ones_like(xx)  # P_0
+        pm = np.array(xx)       # P_1
+        if self.order>0:
+            out += self.coefficients[0]*pm1
+        if self.order>1:
+            out += self.coefficients[1]*pm
+        for m in range(2,self.order):
+            pm, pm1 = ( ((2*m+1.)/(m+1))*xx*pm - (m/(m+1.))*pm1), pm
+            out += self.coefficients[m]*pm
+        return out
