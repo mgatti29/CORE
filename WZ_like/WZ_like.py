@@ -233,8 +233,7 @@ def execute(block, config):
 
     alpha_mag_rm = np.array(f( bincenters_rm))
     
-    print ('magnifi',alpha_mag_rm)
-    
+
     bias_rm = config['bias_rm'] 
     bias_eboss = config['bias_eboss'] 
     bincenters_rm = config['bincenters_rm']
@@ -252,6 +251,8 @@ def execute(block, config):
     bin_edges_eboss = np.append(bin_edges_eboss, bincenters_eboss+(bincenters_eboss[1]-bincenters_eboss[0])*0.5)
     
     like_tot = 0.
+    import timeit
+    start = timeit.default_timer()
     for i in range(1, nbin + 1):
         if i in config['bins_to_be_included']:
             bin_name = "bin_%d" % i
@@ -280,6 +281,13 @@ def execute(block, config):
             
             if(magnif == True): 
                 theory_Nz = np.array([np.array(Nz_rm[i-1,:,jk]-bbb*(alpha_mag_rm-2.)*mag_pos1[i-1,:]-(aaa-2.)*bias_rm[i-1,:,jk]*mag_pos[i-1,:])/(bias_rm[i-1,:,jk]*th_correction) for jk in range((Nz_rm.shape[2]))]).T
+                theory_Nz1 = np.array(Nz_rm[i-1,:,0]-bbb*(alpha_mag_rm-2.)*mag_pos1[i-1,:]-(aaa-2.)*bias_rm[i-1,:,0]*mag_pos[i-1,:])/(bias_rm[i-1,:,0]*th_correction)
+                #print (alpha_mag_rm)
+                #print ('NZ comparison')
+                #print (mask_sigma)
+                #print (theory_Nz1)
+                #print (theory_Nz[:,0])
+                #print ('******')
                 
             else:
                 theory_Nz = np.array([np.array(Nz_rm[i-1,:,jk])/(bias_rm[i-1,:,jk]*th_correction) for jk in range((Nz_rm.shape[2]))]).T
@@ -293,7 +301,7 @@ def execute(block, config):
             
             if (( mean_rm == True) and (mean_eboss == True)):
                 mean_true_z = compute_mean(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
-                mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])**2
+                mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])
                 mean_true_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
                 mean_clustering_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], theory_Nz_eboss[mask_sigma_eboss,0])
 
@@ -301,20 +309,26 @@ def execute(block, config):
                 ccov = config['cross_cov'][i-1]
                 like_tot+=-0.5*np.sum(np.matmul(y,np.matmul(np.linalg.inv(ccov),y)))
                 
-                
+                #print ('mean_true_z ', mean_true_z)
+                #print ('mean_clustering_z_rm', mean_clustering_z_rm)
+                #
+                #print ('mean_true_z_eboss ', mean_true_z_eboss)
+                #print ('mean_clustering_z_eboss', mean_clustering_z_eboss)
+
             else:
                 
                 if( mean_rm == True):
 
                     mean_true_z = compute_mean(bincenters_rm[mask_sigma], nz_rebin[mask_sigma] )
 
-                    mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])**2
-
-                    print ('mean_true_z ', mean_true_z)
-                    print ('mean_clustering_z_rm', mean_clustering_z_rm)
-
+                    mean_clustering_z_rm = compute_mean(bincenters_rm[mask_sigma], theory_Nz[mask_sigma,0])
+                    
+               
+                    like_mean_rm = -0.5*((mean_true_z-mean_clustering_z_rm)/config['syst_mean_rm'][i-1])**2
                     like_tot+=like_mean_rm
-
+                    #print ('mean_true_z ', mean_true_z)
+                    #print ('mean_clustering_z_rm', mean_clustering_z_rm)
+                
                 if(mean_eboss == True):
 
                     mean_true_z_eboss = compute_mean(bincenters_eboss[mask_sigma_eboss], nz_rebin_eboss[mask_sigma_eboss])
@@ -325,8 +339,8 @@ def execute(block, config):
 
                     #std_clustering_z_eboss = compute_std(bincenters_eboss, theory_Nz_eboss)
                     like_mean_eboss  = -0.5*((mean_true_z_eboss-mean_clustering_z_eboss)/config['syst_mean_eboss'][i-1])**2
-                    print ('mean_true_z_eboss ', mean_true_z_eboss)
-                    print ('mean_clustering_z_eboss', mean_clustering_z_eboss)
+                    #print ('mean_true_z_eboss ', mean_true_z_eboss)
+                    #print ('mean_clustering_z_eboss', mean_clustering_z_eboss)
 
                     like_tot+=like_mean_eboss
                 
@@ -336,15 +350,15 @@ def execute(block, config):
                 std_clustering_z_rm = compute_std(bincenters_rm, theory_Nz[:,0])
                 like_std_rm =  -0.5*((std_true_z-std_clustering_z_rm)/config['syst_std_rm'][i-1])**2
                 
-                print ('std_true_z_rm ', std_true_z)
-                print ('std_clustering_z_rm', std_clustering_z_rm)
+                #print ('std_true_z_rm ', std_true_z)
+                #print ('std_clustering_z_rm', std_clustering_z_rm)
             
                 like_tot+= like_std_rm
                 
                 
             # Gary's likelihood.
             if config['full_shape']:
-                
+                print ('gary')
                 # compute covariance ***********
                 try:
                     mute = covariance_jck(theory_Nz_eboss[:,1:],theory_Nz_eboss[:,1:].shape[1],'jackknife')
@@ -378,8 +392,8 @@ def execute(block, config):
             
         
     block[names.likelihoods, 'wz_like'] = like_tot
-
-
+    end = timeit.default_timer()
+    print ('time', start-end)
     return 0
 
 def cleanup(config):
