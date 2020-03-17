@@ -369,8 +369,9 @@ def execute(block, config):
                 normwz = np.sum(theory_Nz[mask_sigma,0])
                 y =(nz_rebin*sfx)/normy-theory_Nz[:,0]/normwz
                 
-
-                like_tot+=-0.5*np.sum(((y )/(err_rm/normwz) )**2)
+                chi2 = (y[mask_sigma])/(err_rm[mask_sigma]/normwz)**2
+                
+                like_tot+=-0.5*np.sum(chi2[chi2==chi2])
                 
                 #-poly1(xn)[mean_i]+1
             #ax[2,i].plot(x,yy3, linestyle = 'dashed',color='grey',alpha=0.3)
