@@ -222,11 +222,11 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
             w_unk_rndm=np.array(unknown_rndm['W'][unknown_rndm['bins']==i+1])
             jck_unk_rndm=np.array(unknown_rndm['HPIX'][unknown_rndm['bins']==i+1])
             
-            if 'CC_P_gl' or 'CC_P_shear' in corr_tobecomputed:
+            if ('CC_P_gl' in corr_tobecomputed)or ('CC_P_shear' in corr_tobecomputed):
                 g1_unk = np.array(unknown['g1'][unknown['bins']==i+1])
                 g2_unk = np.array(unknown['g2'][unknown['bins']==i+1])
             
-            if 'AC_U_P_' or 'AC_U_D_' in corr_tobecomputed:
+            if ('AC_U_P_'in corr_tobecomputed) or ('AC_U_D_' in corr_tobecomputed):
                 ra_unkj=np.array(unknown['RA'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
                 dec_unkj=np.array(unknown['DEC'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
                 w_unkj=np.array(unknown['W'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
