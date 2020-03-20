@@ -65,7 +65,7 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
     #TODO: make the update progress working also with the parallelization
     #*************************************************************************************************************
 
-
+    os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
     if time0>0.:
         verbose=True
     else:
@@ -76,7 +76,7 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
     cosmol=cosmol
 
     # load catalogs
-    hdf = pd.HDFStore('./pairscount/dataset.h5','r')
+    hdf = pd.HDFStore('./pairscount/dataset.h5')
     reference = hdf['ref']
     reference_rndm = hdf['ref_random']
     unknown = hdf['unk']
@@ -122,14 +122,14 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
                 ref_j.append(mute_j)
                 tomo_i.append(i-1)
 
-    number_of_cores = 5
+
     chunks=int(math.ceil(np.float(number_of_works))/number_of_cores)
 
 
     start=timeit.default_timer()
     update_progress(0.,timeit.default_timer(),start)
     mute_w=0
-    
+
     stop_upd=False
     for i in range(chunks+1):
         #PARALLELIZATION OF THE REDSHIFT SLICES.
@@ -159,31 +159,6 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
 
 
 
-    """
-    # ALRNATIVE PARALLELISATION ************************************************
-    
-
-    from mpi4py import MPI
-
-    list_run= np.array(number_of_works)
-    run_count=0
-    while run_count<(number_of_works):
-        comm = MPI.COMM_WORLD
-        
-        print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
-        
-        redshift_slice(jackknife_ring,reference,reference_rndm,
-                       unknown,unknown_rndm,cosmol, corr_tobecomputed_tot[run_count+comm.rank],overwrite,
-                    verbose,pairs,min_rp,max_rp,Nbins,min_theta,max_theta,max_rpar,
-                fact_dist,centers,njk,w_estimator,reference_bins_interval['z'],tomo_i[run_count+comm.rank],ref_j[run_count+comm.rank])
-        
-        run_count+=comm.size
-        comm.bcast(run_count,root = 0)
-        comm.Barrier() 
-
-    """
-        
-    # ********************************************************************************
     for i,z_unk in enumerate (unknown_bins_interval['z']):
         if not dontsaveplot:
             plot(Nbins,corr_tobecomputed,reference_bins_interval,i,z_unk,njk,'w',w_estimator)
@@ -221,11 +196,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
             dec_unk_rndm=np.array(unknown_rndm['DEC'][unknown_rndm['bins']==i+1])
             w_unk_rndm=np.array(unknown_rndm['W'][unknown_rndm['bins']==i+1])
             jck_unk_rndm=np.array(unknown_rndm['HPIX'][unknown_rndm['bins']==i+1])
-            
-            if 'CC_P_gl' or 'CC_P_shear' in corr_tobecomputed:
-                g1_unk = np.array(unknown['g1'][unknown['bins']==i+1])
-                g2_unk = np.array(unknown['g2'][unknown['bins']==i+1])
-            
+
+
             if 'AC_U_P_' or 'AC_U_D_' in corr_tobecomputed:
                 ra_unkj=np.array(unknown['RA'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
                 dec_unkj=np.array(unknown['DEC'][(unknown['bins_auto_']==j+1) & (unknown['bins']==i+1)])
@@ -306,7 +278,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                             'min_sep': min_rp,
                             'max_sep': max_rp,
                             'sep_units':'kpc',
-                            'bin_slop': 0.5#,
+                            'bin_slop': 0.03#,
                             #'nodes': 10
                             }
 
@@ -318,6 +290,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         'bin_slop': 0.03#,
                         #'nodes': 10
                         }
+
 
                 if 'CC_A_' in corr_tobecomputed :
                 # 1) cross corr angular bins **********************************************
@@ -337,49 +310,10 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,
                         'cross',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_A_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
-                if 'CC_P_shear' in corr_tobecomputed :
-                    # 2) cross corr physical   ************************************************
-                    if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_shear',Nbins[nnn],i+1,j+1)):
-                        pass
-                    else:
-                        if verbose:
-                            print'\n---> Method: {0}  - bins: {1}'.format('CC_P_shear',Nbins[nnn])
-                        label_u='U_'+str(i+1)
-                        label_ur='UR_'+str(i+1)
-                        label_r='R_'+str(j+1)
-                        label_rr='RR_'+str(j+1)
-
-                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
-                        ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
-                        w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'shear', centers=centers, njk=njk,verbose=verbose,g1=g1_unk,g2=g2_unk)
-
-                        #pairs = J.NNCorrelation()
-                        path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_shear',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
-                        
-                if 'CC_P_gl' in corr_tobecomputed :
-                    # 2) cross corr physical   ************************************************
-                    if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_gl',Nbins[nnn],i+1,j+1)):
-                        pass
-                    else:
-                        if verbose:
-                            print'\n---> Method: {0}  - bins: {1}'.format('CC_P_gl',Nbins[nnn])
-                        label_u='U_'+str(i+1)
-                        label_ur='UR_'+str(i+1)
-                        label_r='R_'+str(j+1)
-                        label_rr='RR_'+str(j+1)
-
-                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
-                        ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
-                        w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'GL', centers=centers, njk=njk,verbose=verbose,g1=g1_unk,g2=g2_unk)
-
-                        #pairs = J.NNCorrelation()
-                        path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_gl',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
 
                 if 'CC_P_' in corr_tobecomputed :
                     # 2) cross corr physical   ************************************************
@@ -397,9 +331,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
                         w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
 
                 if 'CC_D_' in corr_tobecomputed :
@@ -418,9 +352,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_density,pairs,ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,jck_unk,
                         jck_ref,jck_unk_rndm, jck_ref_rndm,w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'density', centers=centers,
                         njk=njk,verbose=verbose)
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_D_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
                 if 'AC_R_D_' in corr_tobecomputed:
                     # 6) w_auto_REF_physical_*  **********************************************************
@@ -439,9 +373,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'density',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_D_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
                 if 'AC_U_' in corr_tobecomputed :
                     # 4) w_auto_UNK ********************************************************************
@@ -460,9 +394,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                             ra_unk_rndm,dec_unk_rndm,jck_unk,jck_unk,jck_unk_rndm,jck_unk_rndm,w_unk,w_unk,
                             w_unk_rndm,w_unk_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                            #pairs = J_auto.NNCorrelation()
+                            pairs = J_auto.NNCorrelation()
                             path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_',Nbins[nnn],i+1,j+1)
-                            #save_obj(path,pairs)
+                            save_obj(path,pairs)
 
                 if 'AC_R_A_' in corr_tobecomputed:
                     # 5) w_auto_REF_angular  ************************************************************
@@ -479,10 +413,10 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
 
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_A_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
                 if 'AC_R_P_' in corr_tobecomputed:
                     # 6) w_auto_REF_physical_*  **********************************************************
@@ -499,9 +433,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
                         w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_P_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
 
                 if 'AC_U_P_' in corr_tobecomputed:
@@ -521,9 +455,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         ra_unk_rndmj,dec_unk_rndmj,jck_unkj,jck_unkj,jck_unk_rndmj,jck_unk_rndmj,w_unkj,w_unkj,
                         w_unk_rndmj,w_unk_rndmj,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
                 if 'AC_U_D_' in corr_tobecomputed:
                     # 6) w_auto_REF_physical_*  **********************************************************
@@ -544,9 +478,9 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         ra_unk_rndmj,dec_unk_rndmj,jck_unkj,jck_unkj,jck_unk_rndmj,jck_unk_rndmj,w_unkj,w_unkj,
                         w_unk_rndmj,w_unk_rndmj,fact_dist,z_ref_value,'density',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_D_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
+                        save_obj(path,pairs)
 
                 if 'AC_R_R_' in corr_tobecomputed:
                     #7) w_auto_REF_rp_*  *************************************************************
@@ -565,13 +499,15 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         w_ref_rndm,fact_dist,z_ref_value,'auto_rp',corr = 'NN', zu=z_ref,zr=z_ref,zur=z_ref_rndm,zrr=z_ref_rndm,centers=centers, njk=njk,verbose=verbose)
 
 
-                        #pairs = J.NNCorrelation()
+                        pairs = J.NNCorrelation()
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_R_',Nbins[nnn],i+1,j+1)
-                        #save_obj(path,pairs)
-                try:
-                    save_obj(path+"_j",J)
-                except:
-                    pass
+                        save_obj(path,pairs)
+
+            #counter+=1
+
+            #if not verbose:
+            #    update_progress(np.float((i*len(reference_bins_interval['z'])+counter+1))/(len(unknown_bins_interval['z'])*len(reference_bins_interval['z'])),timeit.default_timer(),start_time)
+            #return counter
 
 #****************************************************************************************************
 #                                  plotting routine
