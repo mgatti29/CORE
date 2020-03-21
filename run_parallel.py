@@ -26,15 +26,16 @@ if 1==1:
         run_count=0
         while run_count<(number_of_works):
             comm = MPI.COMM_WORLD
+            try:
+                print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
+                name= file_to_run[run_count+comm.rank].split(".pkl")[0]
+                J = load_obj(name)
 
-            print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
-            name= file_to_run[run_count+comm.rank].split(".pkl")[0]
-            J = load_obj(name)
-            
-            pairs = J.NNCorrelation()
-                    
-            save_obj(name.split("_j")[0],pairs)
-          
+                pairs = J.NNCorrelation()
+
+                save_obj(name.split("_j")[0],pairs)
+            except:
+                print ('nothing happens')
       
             run_count+=comm.size
             comm.bcast(run_count,root = 0)
