@@ -53,7 +53,9 @@ if not os.path.exists(path_output+run+'_cosmo_wrong'):
 
 write_options(path_cosmosis+run+'.fits',path_output+run+'_cosmo_wrong')
 write_values(0,path_output+run+'_cosmo_wrong')
-write_params_v(0.35,0.77,0.01,0.72,1.,path_output+run+'_cosmo_wrong')
+
+    
+write_params_v(0.35,0.77,0.047,0.7,0.96,path_output+run+'_cosmo_wrong')
 #os.system("source ./cosmosis/cosmosis/config/setup-cosmosis-nersc")
 os.system("cosmosis {0}/demo17.ini".format(path_output+run+'_cosmo_wrong'))
 
