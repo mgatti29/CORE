@@ -125,7 +125,7 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
     number_of_cores = 5
     chunks=int(math.ceil(np.float(number_of_works))/number_of_cores)
 
-
+    """
     start=timeit.default_timer()
     update_progress(0.,timeit.default_timer(),start)
     mute_w=0
@@ -181,7 +181,7 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
         comm.bcast(run_count,root = 0)
         comm.Barrier() 
 
-    """
+    
         
     # ********************************************************************************
     for i,z_unk in enumerate (unknown_bins_interval['z']):
@@ -209,8 +209,160 @@ def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_
 #****************************************************************************************************
 def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_rndm,cosmol,corr_tobecomputed,overwrite, verbose,pairs,
                     min_rp,max_rp,Nbins,min_theta,max_theta ,max_rpar, fact_dist, centers,njk,w_estimator,reference_bins_interval,i,j):
+    
+    nnn=(len(Nbins))-1
+    print (nnn)
+    go=0
+    if 'CC_A_' in corr_tobecomputed :
+    # 1) cross corr angular bins **********************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_A_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            go+=1
+
+    if 'CC_P_shear' in corr_tobecomputed :
+        # 2) cross corr physical   ************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_shear',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_shear',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+
+    if 'CC_P_gl' in corr_tobecomputed :
+        # 2) cross corr physical   ************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_gl',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_gl',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_jl")
+            except:
+                go+=1
+
+    if 'CC_P_' in corr_tobecomputed :
+        # 2) cross corr physical   ************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
 
 
+    if 'CC_D_' in corr_tobecomputed :
+        # 3) cross density #to be modified **************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_D_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_D_',Nbins[nnn],i+1,j+1)
+            #
+            try:
+                _ = load_obj(path+"_j")
+            except:
+
+                go+=1
+
+    if 'AC_R_D_' in corr_tobecomputed:
+        # 6) w_auto_REF_physical_*  **********************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_D_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_D_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+
+
+                go+=1
+
+    if 'AC_U_' in corr_tobecomputed :
+        # 4) w_auto_UNK ********************************************************************
+        # this has to be computed only once.
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                if verbose:
+                    print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
+                if j==0:
+                    go+=1
+    if 'AC_R_A_' in corr_tobecomputed:
+        # 5) w_auto_REF_angular  ************************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_A_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_A_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+
+    if 'AC_R_P_' in corr_tobecomputed:
+        # 6) w_auto_REF_physical_*  **********************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_P_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_P_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+
+
+    if 'AC_U_P_' in corr_tobecomputed:
+        # 6) w_auto_REF_physical_*  **********************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_P_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1)
+
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+
+
+    if 'AC_U_D_' in corr_tobecomputed:
+        # 6) w_auto_REF_physical_*  **********************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_D_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_D_',Nbins[nnn],i+1,j+1) 
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+
+    if 'AC_R_R_' in corr_tobecomputed:
+        #7) w_auto_REF_rp_*  *************************************************************
+        if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_R_',Nbins[nnn],i+1,j+1)):
+            pass
+        else:
+            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_R_',Nbins[nnn],i+1,j+1)
+            try:
+                _ = load_obj(path+"_j")
+            except:
+                go+=1
+    print (go)
+    if go>0:
+
+            print (i,j)
+            
             ra_unk=np.array(unknown['RA'][unknown['bins']==i+1])
             dec_unk=np.array(unknown['DEC'][unknown['bins']==i+1])
             w_unk=np.array(unknown['W'][unknown['bins']==i+1])
@@ -253,11 +405,11 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
 
 
             '''
-            ra_ref_rndm=np.array(reference_rndm['RA'][reference_rndm['bins']==j+1])
-            dec_ref_rndm=np.array(reference_rndm['DEC'][reference_rndm['bins']==j+1])
-            w_ref_rndm=np.array(reference_rndm['W'][reference_rndm['bins']==j+1])
-            z_ref_rndm=np.array(reference_rndm['Z'][reference_rndm['bins']==j+1])
-            jck_ref_rndm=np.array(reference_rndm['HPIX'][reference_rndm['bins']==j+1])
+            #ra_ref_rndm=np.array(reference_rndm['RA'][reference_rndm['bins']==j+1])
+            #dec_ref_rndm=np.array(reference_rndm['DEC'][reference_rndm['bins']==j+1])
+            #w_ref_rndm=np.array(reference_rndm['W'][reference_rndm['bins']==j+1])
+            #z_ref_rndm=np.array(reference_rndm['Z'][reference_rndm['bins']==j+1])
+            #jck_ref_rndm=np.array(reference_rndm['HPIX'][reference_rndm['bins']==j+1])
             '''
 
 
@@ -349,7 +501,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_shear',Nbins[nnn],i+1,j+1)
                         
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('CC_P_shear',Nbins[nnn])
@@ -373,7 +525,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_gl',Nbins[nnn],i+1,j+1)
                         
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_jl")
                         except:
 
                             if verbose:
@@ -398,7 +550,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_',Nbins[nnn],i+1,j+1)
                         
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('CC_P_',Nbins[nnn])
@@ -423,7 +575,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_D_',Nbins[nnn],i+1,j+1)
                         #
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             
                             if verbose:
@@ -449,7 +601,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_D_',Nbins[nnn],i+1,j+1)
                         
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             
                             
@@ -478,7 +630,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_',Nbins[nnn],i+1,j+1)
                            
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
@@ -502,7 +654,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_A_',Nbins[nnn],i+1,j+1)
                         
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_R_A_',Nbins[nnn])
@@ -527,7 +679,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_P_',Nbins[nnn],i+1,j+1)
                             
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_R_P_',Nbins[nnn])
@@ -551,7 +703,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1)
                             
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
@@ -575,7 +727,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     else:
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_D_',Nbins[nnn],i+1,j+1) 
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_U_D_',Nbins[nnn])
@@ -601,7 +753,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     else:
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_R_',Nbins[nnn],i+1,j+1)
                         try:
-                            _ = load_obj(path+"_j.pkl")
+                            _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_R_R_',Nbins[nnn])
@@ -615,8 +767,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                             w_ref_rndm,fact_dist,z_ref_value,'auto_rp',corr = 'NN', zu=z_ref,zr=z_ref,zur=z_ref_rndm,zrr=z_ref_rndm,centers=centers, njk=njk,verbose=verbose)
 
                             save_obj(path+"_j",J)
-            
-
+           
 #****************************************************************************************************
 #                                  plotting routine
 #****************************************************************************************************
