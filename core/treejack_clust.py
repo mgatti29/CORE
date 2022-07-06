@@ -770,3 +770,6 @@ class Jack(object):
         pairs.update({'jck_N':self.jck_N})
 
         return pairs
+
+    
+    
