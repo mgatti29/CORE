@@ -2,9 +2,8 @@
 
 it computes clustering-z dndz. 
 
-Install: it only requires to run the command
-python setup.py build_ext --inplace
-in the core folder.
+requirements:
+- kmeans_radec https://github.com/esheldon/kmeans_radec
 
 To run the test example, just do
 python run.py
