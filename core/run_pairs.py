@@ -476,8 +476,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_A_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
-                        if verbose:
-                            print'\n---> Method: {0}  - bins: {1}'.format('CC_A_',Nbins[nnn])
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('CC_A_',Nbins[nnn])
 
                         label_u='U_'+str(i+1)
                         label_ur='UR_'+str(i+1)
@@ -498,6 +498,20 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_shear',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('CC_P_shear',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
+                        ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
+                        w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'shear', centers=centers, njk=njk,verbose=verbose,g1=g1_unk,g2=g2_unk)
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_shear',Nbins[nnn],i+1,j+1)
                         
                         try:
@@ -522,6 +536,20 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_gl',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('CC_P_gl',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
+                        ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
+                        w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'GL', centers=centers, njk=njk,verbose=verbose,g1=g1_unk,g2=g2_unk)
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_gl',Nbins[nnn],i+1,j+1)
                         
                         try:
@@ -547,6 +575,20 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_P_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('CC_P_',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,
+                        ra_ref_rndm,dec_ref_rndm,jck_unk,jck_ref,jck_unk_rndm, jck_ref_rndm,
+                        w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'cross',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_P_',Nbins[nnn],i+1,j+1)
                         
                         try:
@@ -572,6 +614,20 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('CC_D_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('CC_D_',Nbins[nnn])
+                        label_u='U_'+str(i+1)
+                        label_ur='UR_'+str(i+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_density,pairs,ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,jck_unk,
+                        jck_ref,jck_unk_rndm, jck_ref_rndm,w_unk,w_ref,w_unk_rndm,w_ref_rndm,fact_dist,z_ref_value,'density', centers=centers,
+                        njk=njk,verbose=verbose)
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('CC_D_',Nbins[nnn],i+1,j+1)
                         #
                         try:
@@ -598,6 +654,20 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_D_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_D_',Nbins[nnn])
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_density, pairs, ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
+                        w_ref_rndm,fact_dist,z_ref_value,'density',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_D_',Nbins[nnn],i+1,j+1)
                         
                         try:
@@ -627,6 +697,22 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                            #print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
+                        if j==0:
+                            label_u='U_'+str(i+1)#+'_'+str(j+1)
+                            label_ur='UR_'+str(i+1)#+'_'+str(j+1)
+                            label_r='U_'+str(i+1)#+'_'+str(j+1)
+                            label_rr='UR_'+str(i+1)#+'_'+str(j+1)
+                            J_auto = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf,pairs, ra_unk,dec_unk,ra_unk_rndm,dec_unk_rndm,ra_unk,dec_unk,
+                            ra_unk_rndm,dec_unk_rndm,jck_unk,jck_unk,jck_unk_rndm,jck_unk_rndm,w_unk,w_unk,
+                            w_unk_rndm,w_unk_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+                            #pairs = J_auto.NNCorrelation()
+                            path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_',Nbins[nnn],i+1,j+1)
+                            #save_obj(path,pairs)
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_',Nbins[nnn],i+1,j+1)
                            
                         try:
@@ -646,11 +732,25 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                                 #pairs = J_auto.NNCorrelation()
                                  #save_obj(path,pairs)
 
+
                 if 'AC_R_A_' in corr_tobecomputed:
                     # 5) w_auto_REF_angular  ************************************************************
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_A_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_A_',Nbins[nnn])
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
+                        w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_A_',Nbins[nnn],i+1,j+1)
                         
                         try:
@@ -676,6 +776,19 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_P_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_P_',Nbins[nnn])
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_physical,pairs,  ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
+                        w_ref_rndm,fact_dist,z_ref_value,'auto',corr = 'NN', centers=centers, njk=njk,verbose=verbose)
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_P_',Nbins[nnn],i+1,j+1)
                             
                         try:
@@ -700,6 +813,10 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_P_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_P_',Nbins[nnn],i+1,j+1)
                             
                         try:
@@ -707,6 +824,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
+
 
                             label_u='U_'+str(i+1)+'_'+str(j+1)
                             label_ur='UR_'+str(i+1)+'_'+str(j+1)
@@ -725,12 +843,17 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_U_D_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_U_D_',Nbins[nnn])
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_U_D_',Nbins[nnn],i+1,j+1) 
                         try:
                             _ = load_obj(path+"_j")
                         except:
                             if verbose:
                                 print'\n---> Method: {0}  - bins: {1}'.format('AC_U_D_',Nbins[nnn])
+
 
                             label_u='U_'+str(i+1)+'_'+str(j+1)
                             label_ur='UR_'+str(i+1)+'_'+str(j+1)
@@ -751,6 +874,21 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                     if not overwrite and os.path.exists(('./pairscount/pairs/{0}_{1}_{2}_{3}.pkl').format('AC_R_R_',Nbins[nnn],i+1,j+1)):
                         pass
                     else:
+
+                        #if verbose:
+                        #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_R_',Nbins[nnn])
+                        label_u='R_'+str(j+1)
+                        label_ur='RR_'+str(j+1)
+                        label_r='R_'+str(j+1)
+                        label_rr='RR_'+str(j+1)
+
+                        J = Jack(jackknife_speedup,label_u,label_r,label_ur,label_rr,w_estimator,conf_rp, pairs,ra_ref,dec_ref,ra_ref_rndm,dec_ref_rndm,ra_ref,dec_ref,ra_ref_rndm,
+                        dec_ref_rndm,jck_ref,jck_ref,jck_ref_rndm, jck_ref_rndm,w_ref,w_ref,w_ref_rndm,
+                        w_ref_rndm,fact_dist,z_ref_value,'auto_rp',corr = 'NN', zu=z_ref,zr=z_ref,zur=z_ref_rndm,zrr=z_ref_rndm,centers=centers, njk=njk,verbose=verbose)
+
+
+                        #pairs = J.NNCorrelation()
+
                         path=('./pairscount/pairs/{0}_{1}_{2}_{3}').format('AC_R_R_',Nbins[nnn],i+1,j+1)
                         try:
                             _ = load_obj(path+"_j")

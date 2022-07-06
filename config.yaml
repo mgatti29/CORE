@@ -3,11 +3,8 @@
 ######################################################################
 # what modules are we running
 run:
-    # - dataset
+     - dataset
     # - run_pairs
-    #  - dndz
-     - compare
-    #- compare_noz_fom    #NOT IMPLEMENTED YET [see Pauline's module on Github]
 
 ######################################################################
 #                       verbose module
@@ -18,6 +15,7 @@ run:
 # 2: print everything
 
 verbose: 1
+working_dir: '//global/cscratch1/sd/mgatti/clustering_z/Georgios_WZ/'
 
 
 ######################################################################
@@ -172,173 +170,3 @@ run_pairs:
     jackknife_ring: False         #   it speeds up the computation when it comes to high number of jackknives.
 
     dontsaveplot: True
-######################################################################
-#                       dndz module
-######################################################################
-dndz:
-
-    #  covariances guidelines: *********************************************************************
-    #
-    #  correlated subsamples bias the covariance low.
-    #  ignoring pairs between patches biases the covariance high.
-    #
-    #  jackknife, pairs=True : split half of the pairs among different regions when removing jk_th region
-    #  jackknife, pairs=False : ignore  the pairs among different regions when removing jk_th region
-    #  bootstrap, pairs=True :  half of the pairs among different regions are assigned to the bootstrapped jk_th region
-    #  jackknife, pairs=False : ignore the pairs among different regions when bootstrapping the jk_th region
-
-
-
-    resampling: jackknife                # bootstrap or jackknife
-    resampling_pairs: True               # resampling over pairs rather than galaxies
-    number_of_bootstrap: 200             # number of bootstrap. Ingored in jackknife.
-
-    # **********************************************************************************************
-
-
-    photo_z_column: 'Zphoto'
-    tomo_bins: ['1','2','3']         # also 'ALL'
-    z_min: ['None','None','None']    #0.6 #'None'                   # z_min (>=)
-    z_max: ['None','None','None']    #0.8 #'None'                   # z_max (<=)
-
-
-
-    #  Methods used to compute the dndz. ***************************************************************
-
-    #    - 'Menard' :                  dndz from cross-correlation computed at fixed angular scales
-    #    - 'Menard_physical_scales':   dndz from cross-correlation computed at fixed physical scales
-
-    #    - 'Newman':   it uses the Newman method (fit the cross-correlation computed at fixed angular scales)
-    #    - 'Schimdt' : it uses the Schmidt method (one bin estimation, counting pairs in anulus in physical scales)
-
-    methods:  ['Menard_physical_scales']
-
-
-
-    # ***  Methods options ****************************************************************************
-
-    # options Menard only: ******************************
-    bias_correction_reference_Menard:  'AC_R_P_'      # it can be: None, AC_R_P_  or AC_R_R_
-    bias_correction_unknown_Menard: 'None' #'AC_U_P_'        # it can be: None, AC_U_P_  or AC_U_
-
-                                                     # Note: with AC_U_, it will perform the iterative procedure a la Newman
-
-    gamma: 1.                     # exponent of the weigthing (theta**(-gamma))
-    weight_variance:  False       # minimum variance weighting [Menard method only]
-    pairs_weighting:  False       # if set, it weights the pair counts (DD,DR,RD,RR) first. [Menard method only]
-
-
-    # options Newman only: ************************************************
-    bias_correction_Newman: 1     # 0 NO BIAS,
-                                  # bias = 1: iterative procedure to estimate b_u;
-
-    fit_free: True                       # Newman: let the exponent of the cross correlation free in the fitting (defaul: False)
-    use_physical_scale_Newman: True     # fit the CC in physical scales rather than angular scales (defaul: False)
-
-
-
-    # options Schmidt only:  ******************************
-    bias_correction_reference_Schmidt: 'AC_R_D_'      # it can be: None, AC_R_D_ or AC_R_R_
-    bias_correction_unknown_Schmidt: 'None' #'AC_U_D_'        # it can be: None, AC_U_D_ or AC_U_
-
-                                                      # Note: with AC_U_, it will perform the iterative procedure a la Newman
-
-
-
-    # options Newman & Schmidt ******************************
-    show_fit: False                # if true, it saves the fit for CC and AC
-
-
-    # bounds format: [[min_amplitude, min_index, min_constant],[min_amplitude, min_index, min_constant]]
-    # if fit_free=False, it will ignore the bounds and guess on the index of CC.
-
-    bounds_CC_fit:        [[-1,1,-0.01],[1.,3, 0.01]]
-    initial_guess_CC_fit: [0.01,2,0.01]
-    bounds_AC_U_fit:       [[0.01,1,-0.01],[1.,3,0.01]]
-    initial_guess_AC_U_fit: [0.01,2,0.01]
-    bounds_AC_R_fit:       [[0.01,-1,-0.01],[200.,3,0.01]]
-    initial_guess_AC_R_fit:  [2,1.5,0.01]
-
-    # *** General options ****************************************************************************
-
-    w_estimator: 'Natural_noRu'             # which estimator to use for the w(theta)
-
-    only_diagonal:  True          # when it comes to compute statistics, it considers only the diagonal.
-    verbose:  False
-
-    # ***  Optimization options ****************************************************************************
-
-    optimization:  False              # if false, it doesn't perform the scales optimization
-    Nbins:  [8]                           # angular bins (they should be the same of run_pairs module)
-    interval_width: 3.                    # parameter for the optimization of scales
-    step_width: 6.                        # parameter for the optimization of scales
-
-    # ***  Regularizations options  **************************************************************************
-    # this will apply only to the dndz with and without bias correction that have proven to have the best S/N
-
-    regularization: False                         # if set, it will correct for negative point and fit the dndz
-    set_negative_to_zero:  fixed                     # set negative values to zero; none, fixed, mcmc
-    fit: gaussian_match_pdf                           # choose between None, gaussian_processes,gaussian_match_pdf
-    prior_gaussian_process: None    #[1.53689698e+04  , 1.68542771e-01]
-
-# *****************************************************************************************************************************
-
-###############################################################################
-#                               COMPARE MODULE
-###############################################################################
-
-# compare takes input n(z) and does simple redshift bias model fitting
-compare:
-
-    label_output: 'Menard_bias_corrected'
-
-    tomo_bins: ['1','2','3']  #tomobins as assumed in the dataset file.
-
-    photo_z_columns: ['Zphoto'] #,'Zphoto']  #   it will avergae the photo-z predictions over these columns
-    true_column:     'Zphoto'           #   it will compute the residual shifts over this
-
-    path_wz_samples: ['./output_dndz/TOMO_1/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20','./output_dndz/TOMO_2/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20','./output_dndz/TOMO_3/best_Nz/Nz_Menard_physical_scales___jackknife_pairs_20']
-
-    path_datasets: ['./pairscount/','./pairscount/','./pairscount/']
-
-    match: 'mean'  #mean or chi2
-    # priors ******************************************************************************
-    #
-    # priors have to be in the form of priors: {'tomo1': priors_tomo1, 'tomo2': priors_tomo2 ... 'tomoN': priors_tomoN, 'gamma': gamma}.
-    # gamma can be omitted. for each tomobin, you can set the priors on shift,amplitude, and spread. omitting one of them will cause the code
-    # to ignore the parameter in the MCMC
-    #
-    #
-
-    priors: {'photo_z1' : {
-                          # 1ST TOMOGRAPHIC BIN ************
-                          'tomo1' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                    'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}, #,
-                                    #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
-
-                          # 2ND TOMOGRAPHIC BIN ************
-                          'tomo2' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                    'amplitude'  : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}, #,
-                                    #'spread': {'kind': 'uniform', 'weight': 1,'kwargs': {'loc': 1., 'scale': 0.00000001}}}
-
-                          # 3RD TOMOGRAPHIC BIN ************
-                          'tomo3' : {'deltaz': {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0.0, 'scale': 0.05}},
-                                    'amplitude' : {'kind': 'truncnorm', 'weight': 1,'kwargs': {'a': -5.0, 'b': 5.0,'loc': 0, 'scale': 1.}}}}}#
-
-    # **************************************************************************************
-    sigma: all            #this selects wz dndz only in the interval mean(wz) +- sigma *std. all option available
-    zmin: 'None'
-    zmax: 'None'
-    add_noise: True         #it adds random noise to the true distribution (for sims only and photoz)
-
-    shift_pz_1: [0.,0.,0.]          #this applies a shift to the true distribution beforehand
-    model_kwargs: {'z0': 0.5}
-
-    resampling: bootstrap
-    # mcmc options **************************************
-
-    cov_mode: '2off_diag'
-    nwalkers: 30
-    nburnin: 20
-    nrun: 30
-    live_dangerously: False,
