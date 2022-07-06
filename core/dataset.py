@@ -637,7 +637,7 @@ def  plot_redshift_distr(z,edges,label):
 
 def save_obj( name,obj ):
     with open( name + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(obj, f, protocol=3)
 
 def load_obj(name):
     with open( name + '.pkl', 'rb') as f:
