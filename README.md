@@ -7,4 +7,4 @@ python setup.py build_ext --inplace
 in the core folder.
 
 To run the test example, just do
-python run.py
+python run.py (the basic example infers the n(z) of COSMOS photometric galaxies using a collection of spectra from the Laigle2016 data)
