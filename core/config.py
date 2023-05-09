@@ -11,8 +11,7 @@ import os
 
 from .dataset import dataset
 from .run_pairs import run_pairs
-from .dndz import dndz
-from .compare_multiplefiles_joint import compare
+
 
 def core(config):
     """Run the wizard code, given a configuration dictionary
@@ -87,8 +86,10 @@ def read_config(file_name):
     :param file_name:   yaml file name which we read
     """
     import yaml
+    print ('reading config file:',file_name)
     with open(file_name) as f_in:
         config = yaml.load(f_in.read())
+        
     return config
 
 def save_config(config, file_name):

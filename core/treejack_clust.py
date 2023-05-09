@@ -16,7 +16,7 @@ from scipy.spatial import distance
 import math
 import astropy # astropy. https://github.com/astropy/astropy
 from astropy.cosmology import Planck15 as Planck15
-from treejack_cython import dist_cent,loop
+
 from .dataset import save_obj,load_obj
 import random
 cosmol=Planck15
@@ -74,16 +74,10 @@ class Jack(object):
     def NNCorrelation(self):
         t0 = time.time()
 
-        if self.verbose:
-            print
-            print time.ctime()
-            print
+
         self.prolog()
         pairs= self.epilog()
-        if self.verbose:
-            print
-            print "Elapsed time", time.strftime('%H:%M:%S',time.gmtime(time.time()-t0))
-            print
+
         return pairs
 
 
@@ -646,8 +640,8 @@ class Jack(object):
                     pairs[i][j] = self.parallel_density([i],[j])
                 else:
                     pairs[i][j] = self.parallel([i],[j])
-            except RuntimeError, e:
-                print e
+            except:
+           
                 pairs[i][j] = np.zeros(shape)
 
         def fun_speedup(othersample,otehrsample1,jackk):
@@ -672,8 +666,8 @@ class Jack(object):
                         pairsCC1[prs]+=pairsCC2[prs]
                     pairs_ring[jackk][1] = pairsCC1
                     pairs_ring[jackk][0] = pairs_auto
-            except RuntimeError, e:
-                print e
+            except:
+         
                 pairs_ring[jackk][0] = np.zeros(shape)
                 pairs_ring[jackk][1] = np.zeros(shape)
 

@@ -8,7 +8,7 @@ from scipy.interpolate import interp1d
 import scipy.integrate as pyint
 from .dataset import save_obj, load_obj, update_progress
 from astropy.cosmology import *
-from treejack_clust import Jack
+from .treejack_clust import Jack
 import  pickle
 import  math
 import time
@@ -17,11 +17,84 @@ import warnings
 import multiprocessing as mp
 from multiprocessing import *
 from functools import partial
-from .functions_nz import weight_w,estimator,make_wz_errors,covariance_jck
+
 from scipy import spatial
 from scipy.spatial import distance
 from queue import *
 import copy
+
+def covariance_jck(TOTAL_PHI,jk_r,type_cov):
+    if type_cov=='jackknife':
+        fact=(jk_r-1.)/(jk_r)
+
+    elif type_cov=='bootstrap':
+        fact=1./(jk_r)
+    #  Covariance estimation
+
+    average=np.zeros(TOTAL_PHI.shape[0])
+    cov_jck=np.zeros((TOTAL_PHI.shape[0],TOTAL_PHI.shape[0]))
+    err_jck=np.zeros(TOTAL_PHI.shape[0])
+
+
+    for kk in range(jk_r):
+        average+=TOTAL_PHI[:,kk]
+    average=average/(jk_r)
+
+    # print average
+    for ii in range(TOTAL_PHI.shape[0]):
+     for jj in range(ii+1):
+          for kk in range(jk_r):
+            cov_jck[jj,ii]+=TOTAL_PHI[ii,kk]*TOTAL_PHI[jj,kk]
+
+          cov_jck[jj,ii]=(-average[ii]*average[jj]*jk_r+cov_jck[jj,ii])*fact
+          cov_jck[ii,jj]=cov_jck[jj,ii]
+
+    for ii in range(TOTAL_PHI.shape[0]):
+        err_jck[ii]=np.sqrt(cov_jck[ii,ii])
+    # print err_jck
+
+    #compute correlation
+    corr=np.zeros((TOTAL_PHI.shape[0],TOTAL_PHI.shape[0]))
+    for i in range(TOTAL_PHI.shape[0]):
+      for j in range(TOTAL_PHI.shape[0]):
+        corr[i,j]=cov_jck[i,j]/(np.sqrt(cov_jck[i,i]*cov_jck[j,j]))
+
+    average=average*fact
+    return {'cov' : cov_jck,
+          'err' : err_jck,
+          'corr':corr,
+          'mean':average}
+
+def covariance_scalar_jck(TOTAL_PHI,jk_r,type_cov):
+    if type_cov=='jackknife':
+      fact=(jk_r-1.)/(jk_r)
+
+    elif type_cov=='bootstrap':
+      fact=1./(jk_r)
+    #  Covariance estimation
+
+    average=0.
+    cov_jck=0.
+    err_jck=0.
+
+
+    for kk in range(jk_r):
+        average+=TOTAL_PHI[kk]
+    average=average/(jk_r)
+
+    for kk in range(jk_r):
+    #cov_jck+=TOTAL_PHI[kk]#*TOTAL_PHI[kk]
+
+        cov_jck+=fact*(-average+TOTAL_PHI[kk])*(-average+TOTAL_PHI[kk])
+
+
+    err_jck=np.sqrt(cov_jck)
+
+
+    #average=average*(jk_r)/(jk_r-1)
+    return {'cov' : cov_jck,
+          'err' : err_jck,
+          'mean': average}
 
 def run_pairs(corr_tobecomputed =['CC_A_','CC_P_','CC_D_','AC_U_','AC_U_P_','AC_R_A_','AC_R_P_','AC_R_R_'],
                 pairs=['DD','DR','RD','RR'],
@@ -296,7 +369,7 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                 _ = load_obj(path+"_j")
             except:
                 if verbose:
-                    print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
+                    print('\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn]))
                 if j==0:
                     go+=1
     if 'AC_R_A_' in corr_tobecomputed:
@@ -517,8 +590,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('CC_P_shear',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('CC_P_shear',Nbins[nnn])
                             label_u='U_'+str(i+1)
                             label_ur='UR_'+str(i+1)
                             label_r='R_'+str(j+1)
@@ -556,8 +629,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                             _ = load_obj(path+"_jl")
                         except:
 
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('CC_P_gl',Nbins[nnn])
+                           # if verbose:
+                           #     print'\n---> Method: {0}  - bins: {1}'.format('CC_P_gl',Nbins[nnn])
                             label_u='U_'+str(i+1)
                             label_ur='UR_'+str(i+1)
                             label_r='R_'+str(j+1)
@@ -594,8 +667,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('CC_P_',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('CC_P_',Nbins[nnn])
                             label_u='U_'+str(i+1)
                             label_ur='UR_'+str(i+1)
                             label_r='R_'+str(j+1)
@@ -634,8 +707,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                             _ = load_obj(path+"_j")
                         except:
                             
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('CC_D_',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('CC_D_',Nbins[nnn])
                             label_u='U_'+str(i+1)
                             label_ur='UR_'+str(i+1)
                             label_r='R_'+str(j+1)
@@ -675,8 +748,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         except:
                             
                             
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_R_D_',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_D_',Nbins[nnn])
                             label_u='R_'+str(j+1)
                             label_ur='RR_'+str(j+1)
                             label_r='R_'+str(j+1)
@@ -718,8 +791,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('AC_U_',Nbins[nnn])
                             if j==0:
                                 label_u='U_'+str(i+1)#+'_'+str(j+1)
                                 label_ur='UR_'+str(i+1)#+'_'+str(j+1)
@@ -756,8 +829,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_R_A_',Nbins[nnn])
+                           # if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_A_',Nbins[nnn])
                             label_u='R_'+str(j+1)
                             label_ur='RR_'+str(j+1)
                             label_r='R_'+str(j+1)
@@ -794,8 +867,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_R_P_',Nbins[nnn])
+                           # if verbose:
+                               # print'\n---> Method: {0}  - bins: {1}'.format('AC_R_P_',Nbins[nnn])
                             label_u='R_'+str(j+1)
                             label_ur='RR_'+str(j+1)
                             label_r='R_'+str(j+1)
@@ -822,8 +895,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
+                           #if verbose:
+                           #     print'\n---> Method: {0}  - bins: {1}'.format('AC_U_P_',Nbins[nnn])
 
 
                             label_u='U_'+str(i+1)+'_'+str(j+1)
@@ -851,8 +924,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_U_D_',Nbins[nnn])
+                           # if verbose:
+                           #     print'\n---> Method: {0}  - bins: {1}'.format('AC_U_D_',Nbins[nnn])
 
 
                             label_u='U_'+str(i+1)+'_'+str(j+1)
@@ -893,8 +966,8 @@ def redshift_slice(jackknife_speedup,reference,reference_rndm, unknown,unknown_r
                         try:
                             _ = load_obj(path+"_j")
                         except:
-                            if verbose:
-                                print'\n---> Method: {0}  - bins: {1}'.format('AC_R_R_',Nbins[nnn])
+                            #if verbose:
+                            #    print'\n---> Method: {0}  - bins: {1}'.format('AC_R_R_',Nbins[nnn])
                             label_u='R_'+str(j+1)
                             label_ur='RR_'+str(j+1)
                             label_r='R_'+str(j+1)
@@ -1104,7 +1177,7 @@ def distance_calc(unknown,reference,unknown_rndm,reference_rndm,njk,centers):
     start=timeit.default_timer()
     for i in range(njk):
         if len(ra_m[jk_m==i]) ==0 or len(dec_m[jk_m==i])==0:
-            max_dist_region1[i,j]=0.
+            max_dist_region1[i]=0.
         else:
 
             ra_c,dec_c=centers[i]

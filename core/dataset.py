@@ -127,8 +127,11 @@ def dataset(reference_data, reference_random,
             np.savetxt('./pairscount/pairscounts_centers.txt', centers)
             centers_tree=spatial.cKDTree(centers)
         else:
-            new_cat=np.array(zip(catalog_ref_rndm['RA'],catalog_ref_rndm['DEC']))
+            new_cat=np.vstack([catalog_ref_rndm['RA'],catalog_ref_rndm['DEC']])
+            #print (new_cat.shape)
+
             A=new_cat[np.random.randint(new_cat.shape[0],size=20000),:]
+            
             centers_jck= kmeans_radec.kmeans_sample(A,number_of_regions,maxiter=100,tol=1e-05,verbose=0)
 
             #saving the senters
@@ -137,8 +140,8 @@ def dataset(reference_data, reference_random,
 
         update_progress(0.3)
         # Assign jackknives to galaxies
-        _,catalog_ref_rndm['HPIX']= centers_tree.query(np.array(zip(catalog_ref_rndm['RA'],catalog_ref_rndm['DEC'])))
-        _,catalog_ref['HPIX']= centers_tree.query(np.array(zip(catalog_ref['RA'],catalog_ref['DEC'])))
+        _,catalog_ref_rndm['HPIX']= centers_tree.query(np.vstack([catalog_ref_rndm['RA'],catalog_ref_rndm['DEC']]).T)
+        _,catalog_ref['HPIX']= centers_tree.query(np.vstack([catalog_ref['RA'],catalog_ref['DEC']]).T)
 
     elif kind_regions=='healpix':
         pd.options.mode.chained_assignment = None
@@ -147,9 +150,9 @@ def dataset(reference_data, reference_random,
 
         #saving the centers
         unique=np.unique(radec_to_index(catalog_ref_rndm['DEC'], catalog_ref_rndm['RA'],number_of_regions))
-        healpix_to_int=(zip(unique,range(1,unique.shape[0])))
+      
         center_ra,center_dec=hp.pix2ang(number_of_regions, unique,nest=False, lonlat=True)
-        np.savetxt('./pairscount/pairscounts_centers.txt', zip(center_ra,center_dec))
+        np.savetxt('./pairscount/pairscounts_centers.txt', np.vstack([center_ra,center_dec]))
 
         #converting from healpix to integer
         for kk_int,kk in enumerate(unique):
@@ -218,8 +221,8 @@ def dataset(reference_data, reference_random,
 
     # Assign jackknives
     if  kind_regions=='kmeans':
-        _,catalog_unk_rndm['HPIX']= centers_tree.query(np.array(zip(catalog_unk_rndm['RA'],catalog_unk_rndm['DEC'])))
-        _,catalog_unk['HPIX']= centers_tree.query(np.array(zip(catalog_unk['RA'],catalog_unk['DEC'])))
+        _,catalog_unk_rndm['HPIX']= centers_tree.query(np.vstack([catalog_unk_rndm['RA'],catalog_unk_rndm['DEC']]).T)
+        _,catalog_unk['HPIX']= centers_tree.query(np.vstack([catalog_unk['RA'],catalog_unk['DEC']]).T)
         update_progress(0.8)
     elif  kind_regions=='healpix':
         catalog_unk_rndm['HPIX'] = radec_to_index(catalog_unk_rndm['DEC'], catalog_unk_rndm['RA'],number_of_regions)
