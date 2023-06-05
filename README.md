@@ -14,6 +14,7 @@ Customize options such as correlation function type, binning scheme, etc. To run
 The settings of the run are described in config.yaml.
 
 
+Below: example of simulated redshift distribution recovered using the code. Image taken from Gatti et al., 2018
 ![alt text](https://github.com/mgatti29/CORE/blob/py3/input_files/clustering_z.png)
 
 
