@@ -13,6 +13,11 @@ Open the config.yaml file and set the desired parameters for the clustering reds
 Customize options such as correlation function type, binning scheme, etc. To run the test example, just do python run.py (the basic example infers the n(z) of COSMOS photometric galaxies using a collection of spectra from the Laigle2016 data)
 The settings of the run are described in config.yaml.
 
+
+![alt text](https://github.com/mgatti29/CORE/blob/py3/input_files/clustering_z.png)
+
+
+
 # Contributing
 Contributions to this project are welcome! If you encounter any issues, have ideas for improvements, or would like to add new features, please submit a pull request or open an issue on the GitHub repository.
 
